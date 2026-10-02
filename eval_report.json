@@ -1,0 +1,216 @@
+{
+  "n_scenarios": 20,
+  "confusion": {
+    "true_positive": 8,
+    "false_negative": 2,
+    "false_positive": 0,
+    "true_negative": 10
+  },
+  "recall_on_known_hold_shapes": 0.8,
+  "precision_on_known_clean_shapes": 1.0,
+  "f1": 0.889,
+  "overall_accuracy": 0.9,
+  "rows": [
+    {
+      "scenario": "h01_money_already_held",
+      "ground_truth_hold": true,
+      "engine_says": "HIGH",
+      "score": 4,
+      "rules_fired": [
+        "funds_withheld"
+      ],
+      "rationale": "money is already held \u2014 the decisive case"
+    },
+    {
+      "scenario": "h02_volume_spike",
+      "ground_truth_hold": true,
+      "engine_says": "HIGH",
+      "score": 3,
+      "rules_fired": [
+        "velocity_anomaly"
+      ],
+      "rationale": "daily volume ~430\u03c3 above personal baseline"
+    },
+    {
+      "scenario": "h03_dispute_storm",
+      "ground_truth_hold": true,
+      "engine_says": "HIGH",
+      "score": 3,
+      "rules_fired": [
+        "chargeback_spike"
+      ],
+      "rationale": "disputes 14% of transactions, 14x trailing rate"
+    },
+    {
+      "scenario": "h04_identity_rewrite",
+      "ground_truth_hold": true,
+      "engine_says": "HIGH",
+      "score": 2,
+      "rules_fired": [
+        "identity_churn"
+      ],
+      "rationale": "four identity fields changed in a week"
+    },
+    {
+      "scenario": "h05_new_geography",
+      "ground_truth_hold": true,
+      "engine_says": "HIGH",
+      "score": 2,
+      "rules_fired": [
+        "new_geography"
+      ],
+      "rationale": "60% of activity from countries never seen"
+    },
+    {
+      "scenario": "h06_payout_destination_spray",
+      "ground_truth_hold": true,
+      "engine_says": "LOW",
+      "score": 2,
+      "rules_fired": [
+        "new_payout_destination"
+      ],
+      "rationale": "every recent payout is a first-time destination"
+    },
+    {
+      "scenario": "h07_combined_moderate",
+      "ground_truth_hold": true,
+      "engine_says": "HIGH",
+      "score": 10,
+      "rules_fired": [
+        "velocity_anomaly",
+        "chargeback_spike",
+        "new_geography",
+        "identity_churn"
+      ],
+      "rationale": "no single decisive signal; four moderate ones stack"
+    },
+    {
+      "scenario": "h08_refund_flood",
+      "ground_truth_hold": true,
+      "engine_says": "ELEVATED",
+      "score": 4,
+      "rules_fired": [
+        "chargeback_spike",
+        "excess_refunds"
+      ],
+      "rationale": "a third of transactions are refunds"
+    },
+    {
+      "scenario": "h09_structuring",
+      "ground_truth_hold": true,
+      "engine_says": "HIGH",
+      "score": 2,
+      "rules_fired": [
+        "structured_amounts"
+      ],
+      "rationale": "every amount is round \u2014 classic structuring shape"
+    },
+    {
+      "scenario": "h10_held_plus_everything",
+      "ground_truth_hold": true,
+      "engine_says": "HIGH",
+      "score": 14,
+      "rules_fired": [
+        "funds_withheld",
+        "velocity_anomaly",
+        "chargeback_spike",
+        "new_geography",
+        "identity_churn"
+      ],
+      "rationale": "worst case: held funds plus every other signal"
+    },
+    {
+      "scenario": "n01_clean_steady",
+      "ground_truth_hold": false,
+      "engine_says": "LOW",
+      "score": 0,
+      "rules_fired": [],
+      "rationale": "a healthy account, no pattern"
+    },
+    {
+      "scenario": "n02_mild_volume_blip",
+      "ground_truth_hold": false,
+      "engine_says": "LOW",
+      "score": 3,
+      "rules_fired": [
+        "velocity_anomaly"
+      ],
+      "rationale": "1.6\u03c3 \u2014 inside normal variation for a growing account"
+    },
+    {
+      "scenario": "n03_disputes_elevated_not_spiking",
+      "ground_truth_hold": false,
+      "engine_says": "LOW",
+      "score": 3,
+      "rules_fired": [
+        "chargeback_spike"
+      ],
+      "rationale": "2% disputes, within the absolute cap, ~3x baseline but modest"
+    },
+    {
+      "scenario": "n04_one_profile_change",
+      "ground_truth_hold": false,
+      "engine_says": "LOW",
+      "score": 0,
+      "rules_fired": [],
+      "rationale": "a single field change is routine"
+    },
+    {
+      "scenario": "n05_return_to_known_country",
+      "ground_truth_hold": false,
+      "engine_says": "LOW",
+      "score": 2,
+      "rules_fired": [
+        "new_geography"
+      ],
+      "rationale": "one country at 25% \u2014 just under the 30% trigger"
+    },
+    {
+      "scenario": "n06_round_amounts_organic",
+      "ground_truth_hold": false,
+      "engine_says": "LOW",
+      "score": 2,
+      "rules_fired": [
+        "structured_amounts"
+      ],
+      "rationale": "a florist/grocery \u2014 round prices are the business model, not evasion"
+    },
+    {
+      "scenario": "n07_one_new_payout",
+      "ground_truth_hold": false,
+      "engine_says": "LOW",
+      "score": 2,
+      "rules_fired": [
+        "new_payout_destination"
+      ],
+      "rationale": "1 of 4 new \u2014 normal expansion"
+    },
+    {
+      "scenario": "n08_high_refunds_low_value",
+      "ground_truth_hold": false,
+      "engine_says": "LOW",
+      "score": 1,
+      "rules_fired": [
+        "excess_refunds"
+      ],
+      "rationale": "12% refunds but trivial value \u2014 not a laundering pattern"
+    },
+    {
+      "scenario": "n09_sparse_history",
+      "ground_truth_hold": false,
+      "engine_says": "LOW",
+      "score": 0,
+      "rules_fired": [],
+      "rationale": "too little history to assert anything \u2014 must not hallucinate a baseline"
+    },
+    {
+      "scenario": "n10_new_account_everything_looks_new",
+      "ground_truth_hold": false,
+      "engine_says": "LOW",
+      "score": 0,
+      "rules_fired": [],
+      "rationale": "a brand-new account: novelty is not evidence of risk"
+    }
+  ],
+  "limitations": "LIMITATIONS \u2014 state these in the README, without being asked.\n  1. These accounts are SYNTHETIC. Ground truth is ours, not PayPal's.\n  2. We measure the ENGINE's discrimination on known failure shapes.\n     We have NOT measured whether PayPal actually holds accounts for\n     these reasons, or in these proportions.\n  3. Real PayPal hold decisions are not public. There is no ground-truth\n     dataset available to anyone, including us.\n  4. Therefore this number measures OUR rules, not PayPal's behaviour.\n     It is evidence the engine is not decorative (playbook rule 10) and\n     nothing more.\n  5. A production system would be tuned against outcomes we cannot obtain\n     in a hackathon window. Say so rather than implying otherwise."
+}

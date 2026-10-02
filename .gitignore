@@ -1,0 +1,20 @@
+# Secrets — never commit
+client_id
+sandbox_secret
+webhook_id
+
+# Runtime state
+events/*.json
+*.log
+probe_report.json
+scope_report.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+# Ephemeral quick-tunnel hostnames — worthless once the process dies
+tunnel_url.txt
+ui_url.txt
+webhook.json
