@@ -18,3 +18,8 @@ venv/
 tunnel_url.txt
 ui_url.txt
 webhook.json
+
+# throwaway: one-off PayPal approval link + local sandbox artifacts
+payer_action.txt
+demo_invoice.json
+enrich_cache.json

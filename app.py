@@ -24,6 +24,7 @@ from urllib.parse import urlparse, parse_qs, unquote_plus
 sys.path.insert(0, "/root/web3alphatester/paypal")
 from explainer import explain, audit, EXPLAINERS  # noqa: E402
 import ai  # noqa: E402
+from enrich import enrich_event  # noqa: E402
 
 EVENT_DIR = Path("/root/web3alphatester/paypal/events")
 VERIFIED_PATH = Path("/root/.config/paypal/verified_events.json")
@@ -37,6 +38,44 @@ def load_verified() -> dict:
         return {}
 
 
+def summarise_record(record: dict | None) -> dict | None:
+    """
+    Condense a full PayPal record to the handful of fields worth showing.
+    Returns None rather than a partial object when there is nothing to show, so
+    the UI can distinguish "no record" from "empty record".
+    """
+    if not isinstance(record, dict) or not record:
+        return None
+    out: dict = {}
+    status = record.get("status")
+    if status:
+        out["status"] = status
+
+    # order shape
+    units = record.get("purchase_units") or []
+    if units:
+        u = units[0] or {}
+        amt = u.get("amount") or {}
+        if amt:
+            out["amount"] = f"{amt.get('currency_code','')} {amt.get('value','')}".strip()
+        for c in ((u.get("payments") or {}).get("captures") or []):
+            out["capture_id"] = c.get("id")
+            out["capture_status"] = c.get("status")
+        if u.get("invoice_id"):
+            out["invoice_id"] = u["invoice_id"]
+
+    # capture shape
+    amt = record.get("amount") or {}
+    if amt and "amount" not in out:
+        out["amount"] = f"{amt.get('currency_code','')} {amt.get('value','')}".strip()
+    if record.get("id"):
+        out["record_id"] = record["id"]
+    if record.get("final_capture") is not None:
+        out["final_capture"] = record["final_capture"]
+
+    return out or None
+
+
 def severity_for(event_type: str) -> str:
     """
     Severity lives with the receiver's HOLD_EVENTS map (one source of truth),
@@ -46,13 +85,20 @@ def severity_for(event_type: str) -> str:
     return HOLD_EVENTS.get(event_type, ("OTHER", "", "info"))[2]
 
 
-def load_events(limit=50, with_ai=True) -> list[dict]:
+def load_events(limit=50, with_ai=True, with_enrich=True) -> list[dict]:
     """
     Read captured PayPal events, newest first, and explain each one.
 
     The AI layer is best-effort: if ai.tailor() returns text=None (no key, rate
     limited, or the guardrail discarded the output) the card still renders from
     the deterministic explanation alone. The product never depends on it.
+
+    Enrichment is likewise best-effort. Some PayPal state changes are readable
+    by API but NOT delivered to a webhook — the 2026-10-02 capture
+    6YH19408NM0071141 (USD 4,200.00) completed with no event at all. When the
+    payload carries a resolvable id we ask PayPal for the current record, so a
+    missing webhook does not mean a missing fact. A monitor that only listens
+    is incomplete.
     """
     files = sorted(EVENT_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime,
                    reverse=True)[:limit]
@@ -65,9 +111,24 @@ def load_events(limit=50, with_ai=True) -> list[dict]:
             continue
         et = ev.get("event_type", "UNKNOWN")
         eid = ev.get("id", "")
+
+        # best-effort API resolution; never raises, never blocks
+        record = None
+        enrich_note = None
+        if with_enrich and et in ("CHECKOUT.ORDER.APPROVED", "CHECKOUT.ORDER.COMPLETED",
+                                  "CHECKOUT.ORDER.DECLINED"):
+            try:
+                enriched = enrich_event(ev)
+                record = enriched.get("paypal_record")
+                enrich_note = enriched.get("enrich_note")
+            except Exception as e:
+                enrich_note = f"enrichment unavailable: {type(e).__name__}"
+
         ex = explain(ev, severity=severity_for(et),
                      verified=verified.get(f"{et}|{eid}", False)).as_dict()
         ex["received_at"] = f.stat().st_mtime
+        ex["paypal_record"] = summarise_record(record)
+        ex["enrich_note"] = enrich_note
 
         # Known type -> tailor it. Unknown type -> ask the model to explain it,
         # since the rules engine has nothing for it.

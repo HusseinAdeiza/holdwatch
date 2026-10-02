@@ -247,6 +247,20 @@ def extract_facts(resource: dict) -> dict:
       resource.payout_item_id, .transaction_id, .transaction_status,
       .payout_batch_id, .payout_item.{recipient_type, amount.{currency,value},
       .receiver, .note}, .payout_item_fee, .time_processed
+
+    VERIFIED against a real completed checkout (2026-10-02, order
+    52A89694AB3486153, USD 4,200.00): CHECKOUT.ORDER.* events use a COMPLETELY
+    different shape —
+
+      resource.purchase_units[0].amount.{currency_code,value}
+      resource.purchase_units[0].payee.email_address
+      resource.purchase_units[0].description / .invoice_id
+      resource.payer.{email_address,name.{given_name,surname}}
+      resource.payment_source.paypal.{email_address,account_id}
+
+    The first version of this function only read the payout shape, so a genuine
+    $4,200 checkout rendered with facts={} and the dashboard showed a headline
+    with no amount. Order-shaped payloads are now read too.
     """
     facts: dict[str, Any] = {}
     pi = resource.get("payout_item") or {}
@@ -256,6 +270,7 @@ def extract_facts(resource: dict) -> dict:
         if v not in (None, "", {}, []):
             facts[k] = v
 
+    # ---- payout shape -------------------------------------------------
     put("payout_item_id", resource.get("payout_item_id"))
     put("transaction_id", resource.get("transaction_id"))
     put("transaction_status", resource.get("transaction_status"))
@@ -268,7 +283,31 @@ def extract_facts(resource: dict) -> dict:
                            (resource.get("payout_item_fee") or {}).get("currency", "")))
     put("processed_at", resource.get("time_processed"))
 
-    # Generic fallbacks for non-payout events (orders, disputes, account).
+    # ---- order/checkout shape -------------------------------------------
+    units = resource.get("purchase_units") or []
+    if units:
+        u = units[0] or {}
+        uamt = u.get("amount") or {}
+        payer = resource.get("payer") or {}
+        ps = (resource.get("payment_source") or {}).get("paypal") or {}
+        name = (payer.get("name") or {}).get("given_name") or \
+               (ps.get("name") or {}).get("given_name")
+        surname = (payer.get("name") or {}).get("surname") or \
+                  (ps.get("name") or {}).get("surname")
+        put("amount", _fmt_money(uamt.get("value"), uamt.get("currency_code", "")))
+        put("currency", uamt.get("currency_code"))
+        put("order_id", resource.get("id"))
+        put("order_status", resource.get("status"))
+        put("payer", " ".join(x for x in (name, surname) if x) or
+                    payer.get("email_address"))
+        put("payer_email", payer.get("email_address") or ps.get("email_address"))
+        put("payee", (u.get("payee") or {}).get("email_address"))
+        put("description", u.get("description"))
+        put("invoice_id", u.get("invoice_id"))
+        put("country", ((payer.get("address") or {}).get("country_code")
+                        or (ps.get("address") or {}).get("country_code")))
+
+    # ---- generic fallbacks for non-payout, non-order events -------------
     for k in ("invoice_id", "event_status", "dispute_reason", "dispute_life_cycle_stage",
               "outcome", "custom_id"):
         put(k, resource.get(k))
