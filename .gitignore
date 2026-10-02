@@ -25,4 +25,9 @@ demo_invoice.json
 enrich_cache.json
 
 # demo capture output — regenerate with record_demo.mjs, not committed
-video/
+# demo video: pipeline source is committed, generated artefacts are not
+video/cards/
+video/clips/
+video/out/
+video/vo/
+video/shots/
