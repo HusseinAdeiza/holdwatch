@@ -29,18 +29,42 @@ from enrich import enrich_event  # noqa: E402
 
 EVENT_DIR = Path(os.environ.get("HOLIWATCH_EVENTS_DIR",
                                 "/root/web3alphatester/paypal/events"))
-# Fallback chain for a hosted deploy. On Render the absolute path above does not
-# exist, so the dashboard would boot with zero events — which looks broken even
-# though the product is fine. Prefer an explicit $HOLIWATCH_EVENTS_DIR, then a
-# ./events directory beside the code, then the committed fixture so there is
-# always something real to render.
-_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample_payout_held.json"
 
-if not EVENT_DIR.is_dir():
-    for cand in (Path.cwd() / "events", Path(__file__).resolve().parent / "events"):
-        if cand.is_dir():
-            EVENT_DIR = cand
-            break
+
+def _resolve_events_dir() -> Path:
+    """
+    Find a readable events directory.
+
+    The first deploy failed with PermissionError: '/root/web3alphatester/paypal/
+    events'. Path.is_dir() calls stat(), and on a host where the path EXISTS but
+    the parent is unreadable to the service user, stat() raises PermissionError
+    instead of returning False — so the `if not EVENT_DIR.is_dir()` fallback
+    never got a chance to run and the process died at import.
+
+    os.stat errors are swallowed here so a hostile or merely unreadable default
+    can never take the app down. Order: explicit env var, ./events, events/ beside
+    the code. Returns the env value even if unreadable, so /api/health can report
+    the problem rather than hiding it.
+    """
+    def readable(p: Path) -> bool:
+        try:
+            return p.is_dir() and os.access(p, os.R_OK | os.X_OK)
+        except (OSError, PermissionError):
+            return False
+
+    if readable(EVENT_DIR):
+        return EVENT_DIR
+    for cand in (Path.cwd() / "events",
+                 Path(__file__).resolve().parent / "events"):
+        try:
+            if cand.is_dir():
+                return cand
+        except (OSError, PermissionError):
+            continue
+    return EVENT_DIR
+
+
+EVENT_DIR = _resolve_events_dir()
 def verified_path():
     """Local state, not a secret — resolved via config for hosted deploys."""
     import config
