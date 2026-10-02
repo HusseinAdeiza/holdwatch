@@ -33,3 +33,6 @@ video/vo/
 video/shots/
 
 # gallery images are already published on Devpost's CDN
+
+# Captured PayPal events ARE committed: the deployed dashboard renders them so a
+# judge sees real signed payloads. All addresses are sandbox (.example.com).

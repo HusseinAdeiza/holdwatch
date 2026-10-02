@@ -27,7 +27,20 @@ from explainer import explain, audit, EXPLAINERS  # noqa: E402
 import ai  # noqa: E402
 from enrich import enrich_event  # noqa: E402
 
-EVENT_DIR = Path("/root/web3alphatester/paypal/events")
+EVENT_DIR = Path(os.environ.get("HOLIWATCH_EVENTS_DIR",
+                                "/root/web3alphatester/paypal/events"))
+# Fallback chain for a hosted deploy. On Render the absolute path above does not
+# exist, so the dashboard would boot with zero events — which looks broken even
+# though the product is fine. Prefer an explicit $HOLIWATCH_EVENTS_DIR, then a
+# ./events directory beside the code, then the committed fixture so there is
+# always something real to render.
+_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample_payout_held.json"
+
+if not EVENT_DIR.is_dir():
+    for cand in (Path.cwd() / "events", Path(__file__).resolve().parent / "events"):
+        if cand.is_dir():
+            EVENT_DIR = cand
+            break
 def verified_path():
     """Local state, not a secret — resolved via config for hosted deploys."""
     import config

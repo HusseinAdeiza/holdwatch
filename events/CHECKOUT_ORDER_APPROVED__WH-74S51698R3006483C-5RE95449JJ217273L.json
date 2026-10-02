@@ -1,0 +1,97 @@
+{
+  "id": "WH-74S51698R3006483C-5RE95449JJ217273L",
+  "event_version": "1.0",
+  "create_time": "2026-10-02T16:57:12.321Z",
+  "resource_type": "checkout-order",
+  "resource_version": "2.0",
+  "event_type": "CHECKOUT.ORDER.APPROVED",
+  "summary": "An order has been approved by buyer",
+  "resource": {
+    "create_time": "2026-10-02T13:24:42Z",
+    "purchase_units": [
+      {
+        "reference_id": "default",
+        "amount": {
+          "currency_code": "USD",
+          "value": "4200.00"
+        },
+        "payee": {
+          "email_address": "sb-lo5xm53079229@business.example.com",
+          "merchant_id": "FBMMXQ2GB4FMS"
+        },
+        "description": "Design retainer \u2014 March",
+        "invoice_id": "INV2-MEKE-NY55-4ZUC-26W7",
+        "shipping": {
+          "name": {
+            "full_name": "John Doe"
+          },
+          "address": {
+            "address_line_1": "Kingsway Street",
+            "address_line_2": "Maseru 100",
+            "admin_area_2": "Maseru",
+            "admin_area_1": "Maseru",
+            "postal_code": "100",
+            "country_code": "LS"
+          }
+        }
+      }
+    ],
+    "links": [
+      {
+        "href": "https://api.sandbox.paypal.com/v2/checkout/orders/52A89694AB3486153",
+        "rel": "self",
+        "method": "GET"
+      },
+      {
+        "href": "https://api.sandbox.paypal.com/v2/checkout/orders/52A89694AB3486153",
+        "rel": "update",
+        "method": "PATCH"
+      },
+      {
+        "href": "https://api.sandbox.paypal.com/v2/checkout/orders/52A89694AB3486153/capture",
+        "rel": "capture",
+        "method": "POST"
+      }
+    ],
+    "id": "52A89694AB3486153",
+    "payment_source": {
+      "paypal": {
+        "email_address": "sb-7jvql53140885@personal.example.com",
+        "account_id": "3JF49N3XGXTQ6",
+        "account_status": "VERIFIED",
+        "name": {
+          "given_name": "John",
+          "surname": "Doe"
+        },
+        "address": {
+          "country_code": "LS"
+        }
+      }
+    },
+    "intent": "CAPTURE",
+    "payer": {
+      "name": {
+        "given_name": "John",
+        "surname": "Doe"
+      },
+      "email_address": "sb-7jvql53140885@personal.example.com",
+      "payer_id": "3JF49N3XGXTQ6",
+      "address": {
+        "country_code": "LS"
+      }
+    },
+    "status": "APPROVED"
+  },
+  "links": [
+    {
+      "href": "https://api.sandbox.paypal.com/v1/notifications/webhooks-events/WH-74S51698R3006483C-5RE95449JJ217273L",
+      "rel": "self",
+      "method": "GET"
+    },
+    {
+      "href": "https://api.sandbox.paypal.com/v1/notifications/webhooks-events/WH-74S51698R3006483C-5RE95449JJ217273L/resend",
+      "rel": "resend",
+      "method": "POST"
+    }
+  ]
+}

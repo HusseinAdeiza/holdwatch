@@ -1,0 +1,68 @@
+{
+  "id": "WH-COC11055RA711503B-3W074927CF383080E",
+  "create_time": "2024-01-16T21:21:49.000Z",
+  "event_type": "CHECKOUT.ORDER.DECLINED",
+  "resource_type": "checkout-order",
+  "resource_version": "2.0",
+  "summary": "Checkout Order Declined due to Risk Fraud Filter failures",
+  "resource": {
+    "id": "3W074927CF383080E",
+    "status": "CREATED",
+    "payment_source": {
+      "card": {
+        "last_digits": "1111",
+        "expiry": "2025-10",
+        "brand": "VISA",
+        "type": "CREDIT"
+      }
+    },
+    "purchase_units": [
+      {
+        "reference_id": "d9f80740-38f0-11e8-b467-0ed5f89f718b",
+        "shipping": {
+          "address": {
+            "address_line_1": "2211 N First Street",
+            "address_line_2": "Building 17",
+            "admin_area_2": "San Jose",
+            "admin_area_1": "CA",
+            "postal_code": "95131",
+            "country_code": "US"
+          }
+        },
+        "risk_assessment": {
+          "score": 80,
+          "reasons": [
+            "HISTORICAL_RISKINESS"
+          ],
+          "fraud_filter_details": {
+            "status": "DENY",
+            "filters_applied": [
+              "CARDING_AGGRESSION"
+            ]
+          }
+        }
+      }
+    ],
+    "links": [
+      {
+        "href": "https://api-m.paypal.com/v2/checkout/orders/3W074927CF383080E",
+        "rel": "self",
+        "method": "GET"
+      }
+    ]
+  },
+  "links": [
+    {
+      "href": "https://api-m.paypal.com/v1/notifications/webhooks-events/WH-COC11055RA711503B-3W074927CF383080E",
+      "rel": "self",
+      "method": "GET"
+    },
+    {
+      "href": "https://api-m.paypal.com/v1/notifications/webhooks-events/WH-COC11055RA711503B-3W074927CF383080E/resend",
+      "rel": "resend",
+      "method": "POST"
+    }
+  ],
+  "zts": 1494957670,
+  "event_version": "1.0"
+}
