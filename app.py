@@ -72,11 +72,26 @@ def verified_path():
 
 
 def load_verified() -> dict:
-    """ids the receiver accepted as genuinely signed by PayPal."""
-    try:
-        return json.loads(verified_path().read_text())
-    except Exception:
-        return {}
+    """
+    Event ids PayPal confirmed as genuinely signed.
+
+    Prefers live local state (written by receiver.record_verified). Falls back to
+    the committed verified_events.json, which is what a hosted deploy has: its
+    own state directory starts empty, so without this every card would render
+    "verification n/a" despite the payloads being real and verified.
+    """
+    import config
+    live = config.config_dir() / "verified_events.json"
+    bundled = Path(__file__).resolve().parent / "verified_events.json"
+    for p in (live, bundled):
+        try:
+            if p.exists():
+                data = json.loads(p.read_text())
+                if data:
+                    return data
+        except Exception:
+            continue
+    return {}
 
 
 def summarise_record(record: dict | None) -> dict | None:
