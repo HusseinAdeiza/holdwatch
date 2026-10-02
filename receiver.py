@@ -78,15 +78,24 @@ LOCK = threading.Lock()
 # Persisted proof-of-verification: event_id -> True. The UI reads this so a
 # card can only show "signature verified" when the receiver actually confirmed
 # it against PayPal — never inferred.
-VERIFIED_PATH = Path("/root/.config/paypal/verified_events.json")
+# Local state, not a secret: which event ids PayPal verified. Routed through
+# config.config_dir() so a hosted deploy with a different $HOME still resolves
+# it, instead of writing to a hardcoded /root path.
+VERIFIED_PATH = None  # resolved lazily in record_verified()/load; see _verified_path()
+
+
+def _verified_path():
+    import config
+    return config.config_dir() / "verified_events.json"
 
 
 def record_verified(event_id: str, event_type: str = "") -> None:
     try:
-        VERIFIED_PATH.parent.mkdir(parents=True, exist_ok=True)
-        cur = json.loads(VERIFIED_PATH.read_text()) if VERIFIED_PATH.exists() else {}
+        vp = _verified_path()
+        vp.parent.mkdir(parents=True, exist_ok=True)
+        cur = json.loads(vp.read_text()) if vp.exists() else {}
         cur[f"{event_type}|{event_id}"] = True
-        VERIFIED_PATH.write_text(json.dumps(cur, indent=2))
+        vp.write_text(json.dumps(cur, indent=2))
     except Exception:
         pass
 

@@ -34,8 +34,13 @@ import urllib.request
 from pathlib import Path
 
 BASE = "https://api-m.sandbox.paypal.com"
-CFG = Path("/root/.config/paypal")
-CACHE_PATH = CFG / "enrich_cache.json"
+
+
+def _cache_path():
+    """Local cache only — not a credential. Resolved via config so a hosted
+    deploy with a different $HOME still writes somewhere valid."""
+    import config
+    return config.config_dir() / "enrich_cache.json"
 CACHE_TTL = 60 * 30          # PayPal state changes; 30 min is plenty
 
 _token_cache: tuple[float, str] | None = None
@@ -57,7 +62,7 @@ def _load_cache() -> dict:
     global _cache
     if _cache is None:
         try:
-            _cache = json.loads(CACHE_PATH.read_text())
+            _cache = json.loads(_cache_path().read_text())
         except Exception:
             _cache = {}
     return _cache
@@ -69,8 +74,9 @@ def _put_cache(k: str, v: dict) -> None:
     c[k] = {"ts": time.time(), "v": v}
     _cache = c
     try:
-        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CACHE_PATH.write_text(json.dumps(c, indent=2))
+        cp = _cache_path()
+        cp.parent.mkdir(parents=True, exist_ok=True)
+        cp.write_text(json.dumps(c, indent=2))
     except Exception:
         pass
 

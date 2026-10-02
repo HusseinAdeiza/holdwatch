@@ -28,13 +28,16 @@ import ai  # noqa: E402
 from enrich import enrich_event  # noqa: E402
 
 EVENT_DIR = Path("/root/web3alphatester/paypal/events")
-VERIFIED_PATH = Path("/root/.config/paypal/verified_events.json")
+def verified_path():
+    """Local state, not a secret — resolved via config for hosted deploys."""
+    import config
+    return config.config_dir() / "verified_events.json"
 
 
 def load_verified() -> dict:
     """ids the receiver accepted as genuinely signed by PayPal."""
     try:
-        return json.loads(VERIFIED_PATH.read_text())
+        return json.loads(verified_path().read_text())
     except Exception:
         return {}
 
