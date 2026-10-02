@@ -1,0 +1,43 @@
+services:
+  # HoldWatch needs TWO long-lived processes on one host: the webhook receiver
+  # (PayPal posts to it) and the dashboard (a judge reads it). Render runs one
+  # service per process type, so the receiver is its own web service.
+  #
+  # Free tier note: Render's free instances sleep after 15 minutes of
+  # inactivity and have an ephemeral filesystem. That is acceptable for the
+  # dashboard (it re-reads events from the repo's fixtures on boot) but means the
+  # public URL can be briefly cold. A paid instance avoids that.
+  - type: web
+    name: holdwatch-dashboard
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt || true
+    startCommand: python3 app.py
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      # Set these in the Render dashboard — never commit them.
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+  - type: web
+    name: holdwatch-receiver
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt || true
+    startCommand: python3 receiver.py --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false

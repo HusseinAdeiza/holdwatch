@@ -1,0 +1,7 @@
+# HoldWatch has NO third-party dependencies by design — it runs on the Python
+# standard library alone. This file exists so a hosting platform's build step
+# has something valid to run, and so anyone adding a dependency has an obvious
+# place to declare it.
+#
+# Adding a dependency is a deliberate act, not an accident: it changes the
+# "no dependencies" claim made in the README and on the Devpost submission.

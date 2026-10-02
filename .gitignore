@@ -31,3 +31,5 @@ video/clips/
 video/out/
 video/vo/
 video/shots/
+
+# gallery images are already published on Devpost's CDN

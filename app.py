@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import os
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -431,7 +432,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", type=int, default=8080)
+    # $PORT is how every PaaS (Render, Fly, Railway) tells a web service which
+    # port to bind. Default 8080 locally; on a host it takes precedence.
+    ap.add_argument("--port", type=int,
+                    default=int(os.environ.get("PORT", 8080)))
     a = ap.parse_args()
     srv = ThreadingHTTPServer(("0.0.0.0", a.port), Handler)
     print(f"HoldWatch on http://0.0.0.0:{a.port}", flush=True)

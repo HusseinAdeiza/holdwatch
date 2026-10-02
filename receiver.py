@@ -159,8 +159,11 @@ def get_token() -> str:
         return _TOKEN_CACHE[1]
 
     import base64
-    cid = Path("/root/.config/paypal/client_id").read_text().strip()
-    sec = Path("/root/.config/paypal/sandbox_secret").read_text().strip()
+    import config
+    cid = config.client_id()
+    sec = config.secret()
+    if not (cid and sec):
+        return None
     data = urllib.parse.urlencode({"grant_type": "client_credentials"}).encode()
     req = urllib.request.Request(
         f"{BASE}/v1/oauth2/token", data=data, method="POST",
@@ -179,8 +182,10 @@ _TOKEN_CACHE = None
 
 
 def load_webhook_id() -> str | None:
-    p = Path("/root/.config/paypal/webhook_id")
-    return p.read_text().strip() if p.exists() else None
+    # Routed through config.py so a hosted deploy (env vars, or a non-root
+    # home) resolves this the same way as a local run.
+    import config
+    return config.webhook_id()
 
 
 class Handler(BaseHTTPRequestHandler):

@@ -43,31 +43,14 @@ _cache: dict | None = None
 
 
 def _token() -> str | None:
-    """Read credentials from disk only. Never argv, never logged."""
-    global _token_cache
-    now = time.time()
-    if _token_cache and now - _token_cache[0] < 7 * 3600:
-        return _token_cache[1]
-    try:
-        cid = (CFG / "client_id").read_text().strip()
-        sec = (CFG / "sandbox_secret").read_text().strip()
-    except Exception:
-        return None
-    data = urllib.parse.urlencode({"grant_type": "client_credentials"}).encode()
-    req = urllib.request.Request(
-        f"{BASE}/v1/oauth2/token", data=data, method="POST",
-        headers={
-            "Authorization": "Basic " + base64.b64encode(f"{cid}:{sec}".encode()).decode(),
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            tok = json.load(r)["access_token"]
-    except Exception:
-        return None
-    _token_cache = (now, tok)
-    return tok
+    """
+    Read-only access token from disk-stored credentials.
+
+    All credential resolution goes through config.py so a hosted deploy (env
+    vars) and a local run (files) behave identically. Never logs, never raises.
+    """
+    import config
+    return config.token()
 
 
 def _load_cache() -> dict:
