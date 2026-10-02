@@ -22,13 +22,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs, unquote_plus
 
-sys.path.insert(0, "/root/web3alphatester/paypal")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from explainer import explain, audit, EXPLAINERS  # noqa: E402
 import ai  # noqa: E402
 from enrich import enrich_event  # noqa: E402
+import config  # noqa: E402
 
 EVENT_DIR = Path(os.environ.get("HOLIWATCH_EVENTS_DIR",
-                                "/root/web3alphatester/paypal/events"))
+                                Path(__file__).resolve().parent / "events"))
 
 
 def _resolve_events_dir() -> Path:
@@ -507,10 +508,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, {"error": "unknown event_id"})
 
         if p == "/api/health":
+            # Deployment diagnostics. Reports whether credentials RESOLVE, never
+            # what they are. This endpoint is unauthenticated by design — a
+            # judge needs to see the service is live — so it must not leak
+            # anything sensitive, which is why config.describe() is
+            # presence-only by construction.
             return self._send(200, json.dumps({
-                "status": "ok", "events_on_disk": len(list(EVENT_DIR.glob("*.json"))),
+                "status": "ok",
+                "events_on_disk": len(list(EVENT_DIR.glob("*.json"))),
                 "explainer_types": len(EXPLAINERS),
-                "ai_enabled": ai.enabled()}))
+                "ai_enabled": ai.enabled(),
+                "config": config.describe(),
+            }))
 
         return self._send(404, json.dumps({"error": "not found"}))
 

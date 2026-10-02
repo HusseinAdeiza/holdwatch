@@ -205,11 +205,28 @@ PayPal ──webhook──▶ receiver.py ──▶ events/*.json
 | `explainer.py` | Event → plain-language explanation + the outside reviewer |
 | `ai.py` | Gemini layer: tailoring, unknown-event coverage, follow-up Q&A |
 | `app.py` | Dashboard UI and JSON API |
+| `config.py` | Credential resolution (env first, then file) |
+| `enrich.py` | Resolves the live PayPal record for events that never webhook |
 | `register_webhook.py` | Subscribe an endpoint (the dashboard does not expose this) |
 | `paypal_probe.py` | Credential + capability probe (what this app can reach) |
 | `scope_probe.py` | Read/write surface map for a sandbox app |
-| `hold_signals.py` | The original prediction rule engine — **not wired to live data** |
-| `scenarios.py` | 20 synthetic scenarios scoring that engine |
+| `fixtures/` | A genuine PayPal-signed payload, for offline verification |
+
+### Not part of the running product
+
+**`hold_signals.py` and `scenarios.py` are not imported by anything and do not
+run in the deployed product.** They are the original prediction rule engine and
+its 20-scenario evaluation harness, kept because the calibration lesson is worth
+reading and because the published recall/precision figures come from them.
+
+Be clear about what that number is: it scores **an engine the product does not
+use**, against **synthetic scenarios whose ground truth is ours**. It is not
+evidence about the deployed HoldWatch. The deployed product's real evidence is
+the signature verification (`verification_status == SUCCESS` from PayPal) and the
+19 deterministic explanations it serves — not this metric.
+
+`make_demo_payload.py` and `export_site_data.py` are also standalone tooling;
+they create real PayPal transactions and export the site's data respectively.
 
 ---
 
@@ -285,6 +302,52 @@ curl -X POST https://api-m.sandbox.paypal.com/v1/notifications/simulate-event \
 - `GET /api/events` — explained events, with the outside-reviewer result
 - `GET /api/health` — liveness
 - `POST /` — webhook intake (signature-verified; forgeries rejected)
+
+---
+
+## Security posture
+
+Stated plainly, because a judge should not have to infer it.
+
+### What is verified
+
+**Webhook authenticity is enforced against PayPal, not against our own code.**
+Every inbound event is checked with `POST /v1/notifications/verify-webhook-signature`.
+A local checksum was implemented first and discarded — it failed against genuine
+events, and being symmetric it would have permitted forgery from one observed
+valid triple.
+
+**Verification fails closed.** With no `webhook_id` configured the receiver
+returns `503` and stores nothing, rather than accepting an event it cannot
+authenticate. This was a real bug: the receiver originally skipped verification
+when `webhook_id` was absent, and a deployed instance accepted a forged payload.
+Both paths are now tested — `503` with no id, `400` on a forged signature, and
+zero events stored in both cases.
+
+**Forgeries are rejected at intake, not displayed.** Verified by negative control.
+
+### What is not protected
+
+**The dashboard has no authentication.** `holdwatch-dashboard.onrender.com` is
+public. This is a deliberate trade-off: the brief requires a demo a judge can
+actually open, and putting a login in front of it would defeat that. It renders
+only sandbox data we chose to commit — every address in the payloads is an
+`@example.com` address and the amounts are test values. **It must not be pointed
+at a live PayPal account**, where the events would describe real money and real
+customers.
+
+`/api/health` is unauthenticated for the same reason, and is deliberately
+presence-only: it reports whether credentials *resolve*, never their values.
+
+**The receiver writes events to disk without a retention policy.** Fine for a
+hackathon instance with a handful of payloads; a real deployment would need
+rotation and a cap.
+
+### Honest scope
+
+This is a sandbox demo, not a PCI-scoped production service. The signature
+verification and fail-closed intake are real; rate limiting, retention, key
+rotation and account isolation are not implemented.
 
 ---
 

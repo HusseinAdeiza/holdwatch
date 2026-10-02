@@ -52,7 +52,20 @@ MODEL_CHAIN = [
     "gemini-3.1-flash-lite-preview",
 ]
 
-CACHE_PATH = Path("/root/.config/paypal/ai_cache.json")
+def _cache_path() -> Path:
+    """
+    Local cache only — never a credential. Resolved via config so a hosted
+    deploy (where $HOME/.config is the only writable location) persists the
+    cache instead of silently failing on every write.
+
+    This mattered on the live deployment: with a hardcoded /root path the
+    write raised, was swallowed by _save_cache's except, and every page load
+    re-called the model for every event — measured as ai_stats calls:7, hits:0.
+    """
+    import config
+    return config.config_dir() / "ai_cache.json"
+
+
 CACHE_TTL = 60 * 60 * 24 * 7   # one week; explanations don't go stale
 
 _lock = threading.Lock()
@@ -83,7 +96,7 @@ def _load_cache() -> dict:
     global _cache
     if _cache is None:
         try:
-            _cache = json.loads(CACHE_PATH.read_text())
+            _cache = json.loads(_cache_path().read_text())
         except Exception:
             _cache = {}
     return _cache
@@ -93,8 +106,9 @@ def _save_cache(c: dict) -> None:
     global _cache
     _cache = c
     try:
-        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CACHE_PATH.write_text(json.dumps(c, indent=2))
+        cp = _cache_path()
+        cp.parent.mkdir(parents=True, exist_ok=True)
+        cp.write_text(json.dumps(c, indent=2))
     except Exception:
         pass
 
