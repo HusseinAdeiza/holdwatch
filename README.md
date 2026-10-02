@@ -48,6 +48,36 @@ than prediction — and it is true.
 
 ---
 
+## Verified against a real transaction
+
+On 2026-10-02 a **real PayPal checkout completed in the sandbox** and produced
+this project's first genuinely-signed event from PayPal's own API:
+
+```
+order       52A89694AB3486153
+amount      USD 4,200.00
+capture     6YH19408NM0071141
+event       CHECKOUT.ORDER.APPROVED
+signature   verify-webhook-signature -> SUCCESS
+```
+
+Two things only a real transaction exposed, both fixed:
+
+**1. Order payloads have a different shape.** `CHECKOUT.ORDER.*` nests everything
+under `purchase_units[0]`; the payout events do not. The first version read only
+the payout shape, so a genuine `$4,200` approval rendered with **no amount at
+all**. `explainer.extract_facts()` now reads both.
+
+**2. Some PayPal state changes never arrive as webhooks.** The capture completed
+(`GET /v2/payments/captures/6YH19408NM0071141` returns `200`) but **no webhook was
+delivered** for it — the receiver stayed at 9 events. So `enrich.py` resolves the
+current record by API when a payload carries an id. Cached, read-only, and it never
+blocks or raises into the explanation path.
+
+> A monitor that only listens is incomplete.
+
+---
+
 ## The part we care about most
 
 **Only 1 of our 19 explanations states a known cause.** For the other 18, PayPal does

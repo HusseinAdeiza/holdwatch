@@ -249,10 +249,26 @@ function card(e,answers){
        </div>`
     : (e.ai && e.ai.reason && e.ai.reason!=='no GEMINI_API_KEY set'
         ? `<div class="ai-off">AI layer unavailable (${esc(e.ai.reason)}) — showing rule-based explanation</div>` : ''));
+
+  // Amount and counterparty as scannable fields, not only inside the AI
+  // sentence. Added for the demo video: on a real CHECKOUT.ORDER.APPROVED the
+  // USD 4,200.00 and the payer were only visible as prose, which reads far too
+  // slowly at 85 seconds. Fields first, prose second.
+  const F = (k,label,val)=>(val?`<div class="fact"><span class="fact__k">${esc(label)}</span><span class="fact__v tnum">${esc(val)}</span></div>`:'');
+  const head = e.facts && e.facts.amount ? `
+      <div class="evcard__facts">
+        ${F('amount','Amount',e.facts.amount)}
+        ${e.facts.payer?`<div class="fact"><span class="fact__k">Payer</span><span class="fact__v">${esc(e.facts.payer)}</span></div>`:''}
+        ${e.facts.invoice_id?`<div class="fact"><span class="fact__k">Invoice</span><span class="fact__v mono">${esc(e.facts.invoice_id)}</span></div>`:''}
+        ${e.paypal_record&&e.paypal_record.status?`<div class="fact"><span class="fact__k">PayPal says</span><span class="fact__v">${esc(e.paypal_record.status)}</span></div>`:''}
+        ${e.facts.order_status?`<div class="fact"><span class="fact__k">Status</span><span class="fact__v mono">${esc(e.facts.order_status)}</span></div>`:''}
+      </div>` : '';
+
   return `<div class="card ${SEV[e.severity]||'info'}">
     <h2>${esc(e.headline)}</h2>
     <div class="meta">${esc(e.event_type)} &nbsp;·&nbsp; ${esc(e.verified===true?'signature verified':'verification n/a')}</div>
     <div class="impact">${esc(e.impact)}</div>
+    ${head}
     ${aiTxt}
     ${cause}
     <ol>${(e.actions||[]).map(a=>`<li>${esc(a)}</li>`).join('')}</ol>

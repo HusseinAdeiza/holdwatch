@@ -23,3 +23,6 @@ webhook.json
 payer_action.txt
 demo_invoice.json
 enrich_cache.json
+
+# demo capture output — regenerate with record_demo.mjs, not committed
+video/
