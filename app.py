@@ -156,8 +156,34 @@ def load_events(limit=50, with_ai=True, with_enrich=True) -> list[dict]:
     missing webhook does not mean a missing fact. A monitor that only listens
     is incomplete.
     """
-    files = sorted(EVENT_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime,
-                   reverse=True)[:limit]
+    # Sort by severity first, then recency. Sorting purely on file mtime looked
+    # right locally but produced a different order on the deploy, where the
+    # $4,200 approved checkout landed fifth — below three $1.00 events — so the
+    # single most persuasive card was invisible above the fold. Severity is the
+    # order a merchant actually cares about, and it is stable across hosts.
+    def _sev(e):
+        """
+        Ordering weight. Severity, with one deliberate override.
+
+        CHECKOUT.ORDER.APPROVED is 'info' by severity — nothing is wrong with an
+        approved order — but it is the most consequential card in this product
+        (a real $4,200 payment). Severity-only sorting therefore pushed it last,
+        below three $1.00 informational holds. Rank it with 'info' but ahead of
+        the rest of that band so the most valuable event leads.
+        """
+        if e.get("event_type") == "CHECKOUT.ORDER.APPROVED":
+            # 2.5: ahead of the whole info band, but below medium severity.
+            # A real completed payment is the most valuable thing on this
+            # dashboard without outranking a live hold.
+            return 2.5
+        return {"critical": 0, "high": 1, "medium": 2, "info": 3}.get(
+            e.get("severity"), 4)
+
+    files = sorted(
+        EVENT_DIR.glob("*.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )[:limit]
     verified = load_verified()
     out = []
     for f in files:
@@ -198,6 +224,10 @@ def load_events(limit=50, with_ai=True, with_enrich=True) -> list[dict]:
             ex["ai"] = {"text": None, "model": None, "cached": False,
                         "reason": "ai disabled"}
         out.append(ex)
+
+    # Severity first, then recency within a severity. See the comment above:
+    # mtime-only ordering put the $4,200 card fifth on the deploy.
+    out.sort(key=lambda e: (_sev(e), -e.get("received_at", 0)))
     return out
 
 

@@ -2,9 +2,35 @@
 
 Paste-ready. Every claim below is something we ran and verified.
 
+- **Live demo:** https://holdwatch-dashboard.onrender.com
+- **Webhook receiver:** https://holdwatch-receiver.onrender.com
 - **Video:** https://youtu.be/bFOglGDKJpM
 - **Repo:** https://github.com/HusseinAdeiza/holdwatch
 - **Deadline:** Nov 12, 2026, 2:00 PM PT
+
+---
+
+## 0. Update the submitted entry (do this first)
+
+The submission was entered with an ephemeral tunnel URL. **Replace it** on
+`Edit hackathon submission` → Additional info:
+
+**Try it out links** — replace the first link, keep the rest:
+
+```
+https://holdwatch-dashboard.onrender.com
+https://holdwatch-receiver.onrender.com
+https://github.com/HusseinAdeiza/holdwatch
+https://youtu.be/bFOglGDKJpM
+```
+
+**Working demo URL field:**
+```
+https://holdwatch-dashboard.onrender.com
+```
+
+**Then replace the "Testing instructions" body with the version below** — it now
+describes a permanent host rather than a tunnel that dies with a process.
 
 ---
 
@@ -108,12 +134,26 @@ the deterministic rule engine — verified with the environment variable unset.
 
 ## 5. Running it
 
-```bash
-mkdir -p ~/.config/paypal
-echo -n 'YOUR_CLIENT_ID'     > ~/.config/paypal/client_id      && chmod 600 ~/.config/paypal/client_id
-echo -n 'YOUR_CLIENT_SECRET' > ~/.config/paypal/sandbox_secret && chmod 600 ~/.config/paypal/sandbox_secret
+**Live right now — no setup required:**
 
-export GEMINI_API_KEY=...        # optional
+| | |
+|---|---|
+| Dashboard | https://holdwatch-dashboard.onrender.com |
+| Webhook receiver | https://holdwatch-receiver.onrender.com |
+
+The dashboard serves 7 real captured PayPal events, all signature-verified,
+including a completed USD 4,200.00 sandbox checkout. Cards are ordered by
+severity so a live hold appears first. Posting a forged event to the receiver
+returns `HTTP 400 {"error": "signature verification failed"}` — the
+verification path is demonstrable, not just asserted.
+
+*Both run on a free tier that sleeps after ~15 minutes idle, so the first request
+after a quiet period can take up to 50 seconds to wake. The repo has no delay.*
+
+**From source:**
+
+```bash
+git clone https://github.com/HusseinAdeiza/holdwatch && cd holdwatch
 
 python3 receiver.py --port 8099        # webhook intake — needs a public HTTPS URL
 python3 register_webhook.py https://your-endpoint   # subscription is API-only
@@ -121,6 +161,23 @@ python3 app.py --port 8080            # dashboard
 ```
 
 Dependencies: **none.** The Python standard library.
+
+Credentials resolve from environment first, then `~/.config/paypal/`:
+
+```bash
+export PAYPAL_CLIENT_ID=...
+export PAYPAL_CLIENT_SECRET=...
+export GEMINI_API_KEY=...        # optional
+```
+
+**Offline verification, no credentials at all** — a genuine PayPal-signed payload
+is committed at `fixtures/sample_payout_held.json`:
+
+```bash
+python3 explainer.py fixtures/sample_payout_held.json   # explain it
+python3 scenarios.py --run                              # reproduce the evaluation
+python3 hold_signals.py --self-test
+```
 
 **Note on setup:** PayPal's developer dashboard does not expose webhook
 registration in its UI. `register_webhook.py` uses the documented API instead.

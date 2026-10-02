@@ -213,6 +213,34 @@ PayPal ──webhook──▶ receiver.py ──▶ events/*.json
 
 ---
 
+## Live deployment
+
+Both services run publicly. No setup needed to judge the project.
+
+| | |
+|---|---|
+| **Dashboard** | https://holdwatch-dashboard.onrender.com |
+| **Webhook receiver** | https://holdwatch-receiver.onrender.com |
+
+The dashboard serves the seven committed captured events, all signature-verified,
+including the completed USD 4,200.00 checkout. Posting a forged event to the
+receiver returns `HTTP 400 {"error": "signature verification failed"}` — the
+verification path is demonstrable rather than asserted.
+
+Both run on a free tier that sleeps after ~15 minutes of inactivity, so the first
+request after a quiet period can take up to 50 seconds to wake. The repository has
+no such delay.
+
+### Card ordering
+
+Cards are sorted by severity, then recency. A live hold therefore appears above a
+successful payment — deliberately. HoldWatch exists to catch holds, and
+`CHECKOUT.ORDER.APPROVED` is `info` severity because nothing is wrong with it.
+Ordering by file mtime alone was tried first and produced a different order on
+each host, which put the most consequential card below the fold.
+
+---
+
 ## Running it
 
 Requires a PayPal sandbox REST app (`Client ID` + secret).
