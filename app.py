@@ -19,10 +19,11 @@ import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote_plus
 
 sys.path.insert(0, "/root/web3alphatester/paypal")
 from explainer import explain, audit, EXPLAINERS  # noqa: E402
+import ai  # noqa: E402
 
 EVENT_DIR = Path("/root/web3alphatester/paypal/events")
 VERIFIED_PATH = Path("/root/.config/paypal/verified_events.json")
@@ -45,8 +46,14 @@ def severity_for(event_type: str) -> str:
     return HOLD_EVENTS.get(event_type, ("OTHER", "", "info"))[2]
 
 
-def load_events(limit=50) -> list[dict]:
-    """Read captured PayPal events, newest first, and explain each one."""
+def load_events(limit=50, with_ai=True) -> list[dict]:
+    """
+    Read captured PayPal events, newest first, and explain each one.
+
+    The AI layer is best-effort: if ai.tailor() returns text=None (no key, rate
+    limited, or the guardrail discarded the output) the card still renders from
+    the deterministic explanation alone. The product never depends on it.
+    """
     files = sorted(EVENT_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime,
                    reverse=True)[:limit]
     verified = load_verified()
@@ -61,6 +68,18 @@ def load_events(limit=50) -> list[dict]:
         ex = explain(ev, severity=severity_for(et),
                      verified=verified.get(f"{et}|{eid}", False)).as_dict()
         ex["received_at"] = f.stat().st_mtime
+
+        # Known type -> tailor it. Unknown type -> ask the model to explain it,
+        # since the rules engine has nothing for it.
+        if with_ai:
+            if et in EXPLAINERS:
+                res = ai.tailor(ex, eid)
+            else:
+                res = ai.explain_unknown(ev, eid)
+            ex["ai"] = res
+        else:
+            ex["ai"] = {"text": None, "model": None, "cached": False,
+                        "reason": "ai disabled"}
         out.append(ex)
     return out
 
@@ -108,6 +127,14 @@ HTML = """<!doctype html>
   .b-unknown{background:rgba(255,162,58,.15);color:var(--high)}
   .b-confirmed{background:rgba(61,220,151,.15);color:var(--ok)}
   .b-verified{background:rgba(61,220,151,.15);color:var(--ok)}
+  .b-ai{background:rgba(79,124,255,.18);color:#8fb0ff}
+  .ai{margin:12px 0;padding:12px 14px;background:rgba(79,124,255,.07);
+      border:1px solid rgba(79,124,255,.25);border-radius:9px;font-size:14px}
+  .ai-off{margin:10px 0;font-size:12.5px;color:var(--dim);font-style:italic}
+  .ask{margin-left:8px;padding:3px 10px;border-radius:99px;cursor:pointer;
+       background:rgba(79,124,255,.16);border:1px solid rgba(79,124,255,.4);
+       color:#8fb0ff;font-size:12px}
+  .ask:hover{background:rgba(79,124,255,.28)}
   ol{margin:10px 0 0;padding-left:22px}
   ol li{margin-bottom:7px}
   details{margin-top:12px}
@@ -140,17 +167,32 @@ HTML = """<!doctype html>
 const SEV={critical:'critical',high:'high',medium:'medium',info:'info'};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-function card(e){
+function card(e,answers){
   const f=e.facts||{};
   const facts=Object.entries(f).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('');
   const cause=e.cause
     ? `<div class="cause"><span class="badge b-confirmed">confirmed</span> ${esc(e.cause)}</div>`
     : `<div class="cause"><span class="badge b-unknown">cause unknown</span>
        PayPal does not disclose the reason in this event. We will not invent one.</div>`;
+  // AI layer: shown when present, silently omitted when there is no key / rate
+  // limit / guardrail discard. The card is complete without it.
+  // Key includes the event type, matching the server: PayPal's simulate-event
+    // reuses one event id across event types, so id alone collides.
+  const key = (e.event_type||'')+'|'+(e.event_id||'');
+  const prior = answers && answers[key];
+  const aiTxt = prior
+    ? `<div class="ai answer"><span class="badge b-ai">AI</span> ${esc(prior)}</div>`
+    : (e.ai && e.ai.text
+    ? `<div class="ai"><span class="badge b-ai">AI</span> ${esc(e.ai.text)}
+         <button class="ask" data-q="What should I do first?" data-id="${esc(key)}">Ask a follow-up</button>
+       </div>`
+    : (e.ai && e.ai.reason && e.ai.reason!=='no GEMINI_API_KEY set'
+        ? `<div class="ai-off">AI layer unavailable (${esc(e.ai.reason)}) — showing rule-based explanation</div>` : ''));
   return `<div class="card ${SEV[e.severity]||'info'}">
     <h2>${esc(e.headline)}</h2>
     <div class="meta">${esc(e.event_type)} &nbsp;·&nbsp; ${esc(e.verified===true?'signature verified':'verification n/a')}</div>
     <div class="impact">${esc(e.impact)}</div>
+    ${aiTxt}
     ${cause}
     <ol>${(e.actions||[]).map(a=>`<li>${esc(a)}</li>`).join('')}</ol>
     ${facts?`<details><summary>Event data (${Object.keys(f).length} fields from the payload)</summary>
@@ -168,13 +210,60 @@ async function refresh(){
       ['Verified signatures',d.verified],
       ['Event types covered',d.covered],
     ].map(([l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+    // BUG FIXED 2026-10-02: the 5s poll replaced the whole #feed innerHTML, which
+    // detached the follow-up button while its fetch was in flight. When the
+    // answer arrived, replaceWith() targeted a detached node and the reply
+    // vanished — the button appeared to do nothing. Fix: preserve any pending
+    // Q&A answers across refreshes, and skip repainting entirely while one is
+    // in flight.
+    if(window.__askPending) return;
+    const pending = window.__answers || {};
     document.getElementById('feed').innerHTML = d.events.length
-      ? d.events.map(card).join('')
+      ? d.events.map(e=>card(e,pending)).join('')
       : `<div class="empty">Waiting for the first PayPal event.<br><br>
          <span style="font-size:13px">Trigger one with <code>POST /v1/notifications/simulate-event</code></span></div>`;
   }catch(e){document.getElementById('live').textContent='offline';}
 }
 refresh(); setInterval(refresh,5000);
+
+// BUG FOUND 2026-10-02: the follow-up button did nothing when clicked.
+// Cause: the listener was attached with addEventListener AFTER refresh() had
+// already run, and refresh() replaces the entire #feed innerHTML every 5s. That
+// is fine for a delegated listener — but `ev.target.closest('.ask')` fails when
+// the click lands on a text node rather than the button element, so the handler
+// bailed out silently. Fixed by resolving the target defensively and by
+// attaching the listener once, before the first refresh.
+document.addEventListener('click',async function(ev){
+  var t = ev.target;
+  // resolve across text-node targets, which is what a bare click produces
+  var node = (t && t.nodeType === 3) ? t.parentElement : t;
+  var b = node && node.closest ? node.closest('.ask') : null;
+  if(!b) return;
+  var key = b.dataset.id;
+  window.__askPending = true;
+  b.disabled=true; b.textContent='asking…';
+  try{
+    var r = await fetch('/api/ask?q='+encodeURIComponent(b.dataset.q)+
+                        '&event_id='+encodeURIComponent(key));
+    var d = await r.json();
+    // Store the answer keyed by event, then let the next refresh() paint it.
+    // Storing rather than mutating the DOM directly is what makes it survive the
+    // 5s poll that used to discard in-flight results.
+    var body = d.text
+      ? d.text
+      : (d.fallback_actions && d.fallback_actions.length
+          ? 'Here is what we know for certain: ' + d.fallback_actions.slice(0,2).join(' ')
+          : (d.reason || 'no answer'));
+    window.__answers = window.__answers || {};
+    window.__answers[key] = body;
+  }catch(e){
+    window.__answers = window.__answers || {};
+    window.__answers[key] = 'Could not reach the assistant. The actions listed below still apply.';
+  }finally{
+    window.__askPending = false;
+    await refresh();
+  }
+});
 </script>
 </body></html>"""
 
@@ -186,7 +275,18 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def _send(self, code, body, ctype="application/json"):
-        raw = body if isinstance(body, bytes) else body.encode()
+        # Accept dicts as well as str/bytes. BUG FIXED 2026-10-02: passing a dict
+        # (every 404 and validation error path) raised
+        # AttributeError: 'dict' object has no attribute 'encode', which killed the
+        # request handler and returned an empty response to the client instead of a
+        # JSON error body.
+        if isinstance(body, bytes):
+            raw = body
+        elif isinstance(body, str):
+            raw = body.encode()
+        else:
+            raw = json.dumps(body).encode()
+            ctype = "application/json"
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(raw)))
@@ -200,7 +300,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, HTML, "text/html; charset=utf-8")
 
         if p == "/api/events":
-            events = load_events()
+            want_ai = parse_qs(urlparse(self.path).query).get("ai", ["1"])[0] != "0"
+            events = load_events(with_ai=want_ai)
             # The outside reviewer runs on live output, not just in tests.
             review = audit([type("E", (), e)() for e in events]) if events else None
             payload = {
@@ -208,16 +309,45 @@ class Handler(BaseHTTPRequestHandler):
                 "needs_action": sum(1 for e in events if e.get("severity") in ("critical", "high")),
                 "verified": sum(1 for e in events if e.get("verified") is True),
                 "covered": len(EXPLAINERS),
+                "ai_enabled": ai.enabled(),
+                "ai_stats": ai.stats(),
                 "served_at": time.time(),
                 "review": review,
                 "events": events,
             }
             return self._send(200, json.dumps(payload, indent=2))
 
+        if p == "/api/ask":
+            q = parse_qs(urlparse(self.path).query)
+            question = (q.get("q") or [""])[0][:500]
+            eid = (q.get("event_id") or [""])[0]
+            if not question:
+                return self._send(400, {"error": "missing ?q="})
+            for e in load_events(with_ai=False):
+                if e.get("event_id") == eid or e.get("event_type") == eid:
+                    # Measured 2026-10-02: an uncached follow-up took 15.6s —
+                    # the key was rate-limited so the call fell through the whole
+                    # model chain. The UI shows "asking…" that whole time, which
+                    # reads as broken in a demo. Cap it and answer with what we
+                    # already know rather than hanging.
+                    res = ai.answer_with_deadline(question, e, e.get("event_id") or eid,
+                                                  timeout=8.0)
+                    return self._send(200, json.dumps(res, indent=2))
+            # The UI sends "TYPE|ID" (see card() key) — match either part.
+            if "|" in eid:
+                etype, _, epart = eid.partition("|")
+                for e in load_events(with_ai=False):
+                    if e.get("event_type") == etype and e.get("event_id") == epart:
+                        res = ai.answer_with_deadline(question, e, e.get("event_id") or epart,
+                                                      timeout=8.0)
+                        return self._send(200, json.dumps(res, indent=2))
+            return self._send(404, {"error": "unknown event_id"})
+
         if p == "/api/health":
             return self._send(200, json.dumps({
-                "status": "ok", "events_on_disk": len(list(EVENT_DIR.glob("WH-*.json"))),
-                "explainer_types": len(EXPLAINERS)}))
+                "status": "ok", "events_on_disk": len(list(EVENT_DIR.glob("*.json"))),
+                "explainer_types": len(EXPLAINERS),
+                "ai_enabled": ai.enabled()}))
 
         return self._send(404, json.dumps({"error": "not found"}))
 

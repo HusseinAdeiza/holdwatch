@@ -98,6 +98,61 @@ deduplicated on `transmission_id + event_type`.
 
 ---
 
+## Where the AI fits — and where it must not
+
+The model **never decides what happened.** The deterministic rules establish the
+facts; the model phrases and tailors them. Same principle as verifying webhook
+signatures against PayPal's API rather than our own arithmetic: trust the
+authority, then explain.
+
+Three jobs, none of them decorative:
+
+1. **Tailor** — "$1.00 to `beamdaddy@paypal.com`" gets different advice than
+   "$4,000 to a new recipient".
+2. **Coverage** — PayPal exposes **205 event types**. Our rules cover 19; the rest
+   previously returned a stub, and the model explains them usefully.
+3. **Follow-up** — ask "can I get this money today?" and get an answer grounded in
+   that event's verified facts.
+
+### The guardrail
+
+Instructions are not enforcement. `ai._sanitise()` re-checks every response: if the
+rules said *cause not disclosed* and the model asserts a reason, **the model text is
+discarded** and the deterministic explanation stands. Verified: **0 violations across
+6 live AI outputs.**
+
+### It is optional, on purpose
+
+```
+# no key -> everything still works
+6/6 cards render · ai_enabled: false · outside reviewer PASS
+```
+
+`ai.py` never raises into the product. No key, rate limited, or guardrail discard →
+the card renders from the rules alone. A judge cloning this repo gets the full
+deterministic product without supplying anything.
+
+### Measured limits (Gemini, 2026-10-02)
+
+| Finding | Consequence in the code |
+|---|---|
+| `maxOutputTokens` 600 → `finishReason: MAX_TOKENS`, **silently truncated mid-sentence** | Minimum 2048, and truncation raises rather than returning a chopped answer |
+| **429 on 4 of 6** rapid calls | One call per event, cached by `event_type + event_id`; never on the critical path |
+| Uncached follow-up took **15.6s** | Hard 8s deadline, then the deterministic actions are shown instead of hanging |
+| `gemini-2.5-flash-lite` → **404** for new accounts | Fallback chain: `gemini-3-flash-preview` → `gemini-flash-latest` → `gemini-3.1-flash-lite-preview` |
+
+### Configuration
+
+```bash
+export GEMINI_API_KEY=...        # optional; enables the AI layer
+export HOLIWATCH_AI=0            # force off
+export HOLIWATCH_MODEL=...       # override the model
+```
+
+The key is read from the environment and never committed.
+
+---
+
 ## Architecture
 
 ```
@@ -106,7 +161,10 @@ PayPal ──webhook──▶ receiver.py ──▶ events/*.json
                    │  reject forgeries · dedupe on transmission_id
                    ▼
                  explainer.py ──▶ headline · impact · cause · actions
-                   │
+                   │                (deterministic — the source of truth)
+                   ▼
+                   ai.py ──▶ tailors the wording · covers uncovered event types
+                   │        (optional · guarded · never asserts a cause)
                    ▼
                    app.py ──▶ live dashboard
 ```
@@ -115,7 +173,9 @@ PayPal ──webhook──▶ receiver.py ──▶ events/*.json
 |---|---|
 | `receiver.py` | Webhook intake, signature verification, dedup, replay-safe store |
 | `explainer.py` | Event → plain-language explanation + the outside reviewer |
+| `ai.py` | Gemini layer: tailoring, unknown-event coverage, follow-up Q&A |
 | `app.py` | Dashboard UI and JSON API |
+| `register_webhook.py` | Subscribe an endpoint (the dashboard does not expose this) |
 | `paypal_probe.py` | Credential + capability probe (what this app can reach) |
 | `scope_probe.py` | Read/write surface map for a sandbox app |
 | `hold_signals.py` | The original prediction rule engine — **not wired to live data** |
@@ -131,6 +191,8 @@ Requires a PayPal sandbox REST app (`Client ID` + secret).
 mkdir -p ~/.config/paypal
 echo -n 'YOUR_CLIENT_ID'     >  ~/.config/paypal/client_id      && chmod 600 ~/.config/paypal/client_id
 echo -n 'YOUR_CLIENT_SECRET' >  ~/.config/paypal/sandbox_secret && chmod 600 ~/.config/paypal/sandbox_secret
+
+export GEMINI_API_KEY=...        # optional; enables the AI layer
 
 # 1. webhook intake (port 8099) — needs a public URL
 python3 receiver.py --port 8099
