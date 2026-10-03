@@ -236,37 +236,49 @@ class Handler(BaseHTTPRequestHandler):
 
         # 1. verify signature against PayPal (authoritative, method 2)
         #
-        # SECURITY FIX 2026-10-02: this was fail-OPEN. If no webhook_id was
-        # configured, verification was skipped entirely and the event was
-        # accepted with verified=None. A deployed instance with a missing
-        # PAYPAL_WEBHOOK_ID therefore accepted a forged payload — I confirmed it
-        # on the live host, which returned {"received": true} for a fabricated
-        # PAYMENT.PAYOUTS-ITEM.HELD.
+        # SECURITY FAIL-CLOSED (2026-10-02). This was fail-OPEN and I got it
+        # wrong twice before getting it right.
         #
-        # The correct default is fail-CLOSED: with no webhook id we cannot check
-        # the signature against PayPal, so we cannot claim the event is genuine,
-        # and a monitor that silently accepts unverified events is worse than
-        # one that rejects them. Reject unless verification actually ran.
+        # First attempt: verification was skipped entirely when no webhook_id
+        # was configured, so a deployed instance with a missing id ACCEPTED a
+        # forged payload — confirmed live, {"received": true}.
+        #
+        # Second attempt: it returned 503 when webhook_id was absent. But the
+        # deployed Render instance kept accepting, because I had assumed a 400 I
+        # observed was the new code when it was the OLD code taking a different
+        # path. Verified by events stored with verified=None.
+        #
+        # The invariant that actually matters is simpler and does not depend on
+        # configuration at all: an event is only ever recorded when PayPal has
+        # CONFIRMED its signature. Any other outcome is a rejection. If this
+        # service is ever misconfigured or running stale code, it refuses
+        # traffic rather than displaying an attacker's forged "your payout was
+        # held" as fact.
         webhook_id = load_webhook_id()
-        verified, verr = None, "no webhook_id configured; refusing to accept an unverifiable event"
+        verified, verr = False, "no webhook_id configured; refusing to accept an unverifiable event"
 
-        if not webhook_id:
-            print(f"[REJECTED] {evt.get('event_type','?'):44s} "
-                  f"no webhook_id — signature cannot be verified", flush=True)
-            return self._json(503, {
+        if webhook_id:
+            hdr = {
+                "transmission_id": self.headers.get("PAYPAL-TRANSMISSION-ID"),
+                "transmission_time": self.headers.get("PAYPAL-TRANSMISSION-TIME"),
+                "transmission_sig": self.headers.get("PAYPAL-TRANSMISSION-SIG"),
+                "cert_url": self.headers.get("PAYPAL-CERT-URL"),
+                "auth_algo": self.headers.get("PAYPAL-AUTH-ALGO"),
+            }
+            res = verify_signature(raw, hdr, get_token())
+            verified, verr = res["verified"], res["error"]
+
+        # Hard gate, independent of which branch above ran. verified is False
+        # unless PayPal returned SUCCESS for THIS payload.
+        if verified is not True:
+            reason = verr or "signature not confirmed by PayPal"
+            print(f"[REJECTED] {evt.get('event_type','?'):44s} {reason}", flush=True)
+            return self._json(400, {
                 "received": False,
-                "error": "signature verification unavailable: receiver has no webhook_id configured",
+                "error": "signature verification failed",
+                "detail": reason if webhook_id else
+                          "receiver has no webhook_id configured",
             })
-
-        hdr = {
-            "transmission_id": self.headers.get("PAYPAL-TRANSMISSION-ID"),
-            "transmission_time": self.headers.get("PAYPAL-TRANSMISSION-TIME"),
-            "transmission_sig": self.headers.get("PAYPAL-TRANSMISSION-SIG"),
-            "cert_url": self.headers.get("PAYPAL-CERT-URL"),
-            "auth_algo": self.headers.get("PAYPAL-AUTH-ALGO"),
-        }
-        res = verify_signature(raw, hdr, get_token())
-        verified, verr = res["verified"], res["error"]
 
         event_type = evt.get("event_type", "UNKNOWN")
         eid = evt.get("id") or hashlib.sha1(raw).hexdigest()
