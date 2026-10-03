@@ -79,10 +79,16 @@ and we would rather state it than overclaim — see Limitations.
 ### The part we care about most
 
 **Only 1 of our 19 explanations states a known cause.** For the other 18, PayPal
-does not disclose a reason in the payload. So the interface says:
+sent an event without a reason in the payload. So the interface says:
 
-> **CAUSE UNKNOWN** — *"PayPal does not disclose the reason in this event. We will
-> not invent one."*
+> **CAUSE UNKNOWN** — *"PayPal sent this event without a reason. We will not
+> invent one."*
+
+Critically, this is **not** used for state we simply have not received. A
+completed capture of ours (`6YH19408NM0071141`, USD 4,200.00) produced no webhook
+at all; before this was fixed that silence rendered as "cause unknown", claiming
+PayPal withheld a reason we had never been told. Absence of an event is not
+evidence of withholding, so it gets its own state.
 
 An invented reason sends someone to the wrong remedy. Every model response is
 re-checked after generation, and any text asserting an unverified cause is

@@ -149,7 +149,8 @@ def severity_for(event_type: str) -> str:
     return HOLD_EVENTS.get(event_type, ("OTHER", "", "info"))[2]
 
 
-def load_events(limit=50, with_ai=True, with_enrich=True) -> list[dict]:
+def load_events(limit=50, with_ai=True, with_enrich=True,
+                 with_enrichment=False) -> list[dict]:
     """
     Read captured PayPal events, newest first, and explain each one.
 
@@ -157,12 +158,16 @@ def load_events(limit=50, with_ai=True, with_enrich=True) -> list[dict]:
     limited, or the guardrail discarded the output) the card still renders from
     the deterministic explanation alone. The product never depends on it.
 
-    Enrichment is likewise best-effort. Some PayPal state changes are readable
-    by API but NOT delivered to a webhook — the 2026-10-02 capture
-    6YH19408NM0071141 (USD 4,200.00) completed with no event at all. When the
-    payload carries a resolvable id we ask PayPal for the current record, so a
-    missing webhook does not mean a missing fact. A monitor that only listens
-    is incomplete.
+    Enrichment is OFF by default and opt-in via ?enrich=1.
+
+    Some PayPal state changes are readable by API but NOT delivered to a webhook —
+    the 2026-10-02 capture 6YH19408NM0071141 (USD 4,200.00) completed with no
+    event at all. Resolving those records is genuinely useful, BUT it makes
+    OUTBOUND calls with a 20s timeout each, and on 2026-10-02 that stalled
+    /api/events past Render's proxy limit: the endpoint began returning 502 while
+    /api/health stayed 200, so the dashboard rendered an error page instead of
+    any events. A slow third party must never be able to take the page down, so
+    the default path makes no outbound calls at all.
     """
     # Sort by severity first, then recency. Sorting purely on file mtime looked
     # right locally but produced a different order on the deploy, where the
@@ -211,10 +216,27 @@ def load_events(limit=50, with_ai=True, with_enrich=True) -> list[dict]:
         #
         # Only the first justifies "awaiting webhook". The second must not,
         # because it says nothing about whether an event is coming.
+        #
+        # 2026-10-02: /api/events began returning 502 on Render while
+        # /api/health stayed 200. Cause: enrichment makes OUTBOUND calls to
+        # PayPal with a 20s timeout per event, so a slow or unreachable PayPal
+        # stalls the whole request past Render's proxy limit. The dashboard then
+        # rendered an error page instead of any events — an outage on the exact
+        # URL in the submission. Enrichment is now opt-in via
+        # ?enrich=1, and capped, so a slow upstream can never take the page down.
+        #
+        # `record` and `enrich_note` MUST be initialised before the branch: when
+        # enrichment is skipped (the default) they were left unbound, and
+        # summarising them below raised UnboundLocalError -> 500/502 on the
+        # submission URL. Caught by curling ?ai=0 rather than trusting the
+        # earlier 200, which had come from the AI-enabled path.
+        record = None
+        enrich_note = None
         awaiting_webhook = False
         unresolvable = False
-        if with_enrich and et in ("CHECKOUT.ORDER.APPROVED", "CHECKOUT.ORDER.COMPLETED",
-                                  "CHECKOUT.ORDER.DECLINED"):
+        if with_enrich and with_enrichment and et in (
+                "CHECKOUT.ORDER.APPROVED", "CHECKOUT.ORDER.COMPLETED",
+                "CHECKOUT.ORDER.DECLINED"):
             try:
                 enriched = enrich_event(ev)
                 record = enriched.get("paypal_record")
@@ -222,12 +244,9 @@ def load_events(limit=50, with_ai=True, with_enrich=True) -> list[dict]:
                 res = ev.get("resource") or {}
                 if record:
                     pass                      # resolved; nothing outstanding
-                elif res.get("id"):
-                    # We have an id but could not fetch it. That is a lookup
-                    # failure, NOT a missing webhook.
-                    unresolvable = True
                 else:
-                    # No id to resolve at all. Nothing to conclude either way.
+                    # An id we cannot look up says nothing about whether an
+                    # event is coming. Never label it "awaiting webhook".
                     unresolvable = True
             except Exception as e:
                 enrich_note = f"enrichment unavailable: {type(e).__name__}"
@@ -512,8 +531,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, HTML, "text/html; charset=utf-8")
 
         if p == "/api/events":
-            want_ai = parse_qs(urlparse(self.path).query).get("ai", ["1"])[0] != "0"
-            events = load_events(with_ai=want_ai)
+            q = parse_qs(urlparse(self.path).query)
+            want_ai = q.get("ai", ["1"])[0] != "0"
+            # Enrichment hits PayPal over the network, so it is opt-in. A slow
+            # third party previously 502'd this endpoint on Render.
+            want_enrich = q.get("enrich", ["0"])[0] == "1"
+            events = load_events(with_ai=want_ai, with_enrichment=want_enrich)
             # The outside reviewer runs on live output, not just in tests.
             review = audit([type("E", (), e)() for e in events]) if events else None
             payload = {
@@ -535,7 +558,7 @@ class Handler(BaseHTTPRequestHandler):
             eid = (q.get("event_id") or [""])[0]
             if not question:
                 return self._send(400, {"error": "missing ?q="})
-            for e in load_events(with_ai=False):
+            for e in load_events(with_ai=False, with_enrichment=False):
                 if e.get("event_id") == eid or e.get("event_type") == eid:
                     # Measured: an uncached follow-up legitimately takes 8-12s
                     # (model ~3s plus a larger prompt). The earlier 8s deadline
@@ -554,7 +577,7 @@ class Handler(BaseHTTPRequestHandler):
             # for the literal after the live endpoint kept timing out.
             if "|" in eid:
                 etype, _, epart = eid.partition("|")
-                for e in load_events(with_ai=False):
+                for e in load_events(with_ai=False, with_enrichment=False):
                     if e.get("event_type") == etype and e.get("event_id") == epart:
                         res = ai.answer_with_deadline(question, e, e.get("event_id") or epart,
                                                       timeout=ANSWER_TIMEOUT)

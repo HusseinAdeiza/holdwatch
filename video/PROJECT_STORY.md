@@ -58,10 +58,16 @@ the honest version is more useful than the impressive one.
 # The part I'd point a judge at
 
 **Only 1 of our 19 explanations states a known cause.** For the other 18, PayPal
-doesn't disclose a reason in the payload. So the interface says:
+sent an event without a reason in the payload. So the interface says:
 
-> **CAUSE UNKNOWN** — *"PayPal does not disclose the reason in this event. We will
-> not invent one."*
+> **CAUSE UNKNOWN** — *"PayPal sent this event without a reason. We will not
+> invent one."*
+
+A commenter asked how this differs from "a webhook that hasn't arrived yet." It
+should, and it now does. Our own completed capture (`6YH19408NM0071141`,
+USD 4,200.00) produced no webhook at all — and that silence used to render as
+"cause unknown," claiming PayPal withheld a reason we had never been told.
+Absence of an event gets its own state.
 
 An invented reason sends someone to the wrong remedy — chasing a fraud review
 when the real cause was an address mismatch.

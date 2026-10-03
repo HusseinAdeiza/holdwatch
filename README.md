@@ -84,7 +84,24 @@ blocks or raises into the explanation path.
 not disclose the reason in the payload. So the interface says:
 
 > **CAUSE UNKNOWN**
-> *"PayPal does not disclose the reason in this event. We will not invent one."*
+> *"PayPal sent this event without a reason. We will not invent one."*
+>
+> **A distinction worth making explicit**, because getting it wrong is the exact
+> error this product exists to prevent: *"they told us nothing"* and *"we heard
+> nothing"* are different states.
+>
+> | State | What it means |
+> |---|---|
+> | `confirmed` | the payload states a cause |
+> | `cause unknown` | PayPal sent this event **without** a reason |
+> | `awaiting webhook` | we hold a PayPal record, but no event has arrived |
+> | `unresolvable` | the payload carries an id we cannot look up |
+>
+> A completed capture of ours (`6YH19408NM0071141`, USD 4,200.00) produced **no
+> webhook at all**. Before this was fixed, that silence rendered as
+> *"cause unknown"* — claiming PayPal withheld a reason we had simply never been
+> told. The last two states exist so that absence of data is never presented as
+> evidence of withholding.
 
 A tool that guesses gets someone to send money to the wrong place. A tool that says
 "unknown — here is what to do regardless" can be trusted.
