@@ -202,23 +202,46 @@ def load_events(limit=50, with_ai=True, with_enrich=True) -> list[dict]:
         et = ev.get("event_type", "UNKNOWN")
         eid = ev.get("id", "")
 
-        # best-effort API resolution; never raises, never blocks
-        record = None
-        enrich_note = None
+        # Which KIND of absence is this? They are different claims and conflating
+        # them is the bug a commenter caught.
+        #
+        #   awaiting_webhook -> we hold a PayPal record but no event arrived
+        #   unresolvable     -> the payload carries an id we cannot look up
+        #   none             -> enrichment was not applicable or succeeded
+        #
+        # Only the first justifies "awaiting webhook". The second must not,
+        # because it says nothing about whether an event is coming.
+        awaiting_webhook = False
+        unresolvable = False
         if with_enrich and et in ("CHECKOUT.ORDER.APPROVED", "CHECKOUT.ORDER.COMPLETED",
                                   "CHECKOUT.ORDER.DECLINED"):
             try:
                 enriched = enrich_event(ev)
                 record = enriched.get("paypal_record")
                 enrich_note = enriched.get("enrich_note")
+                res = ev.get("resource") or {}
+                if record:
+                    pass                      # resolved; nothing outstanding
+                elif res.get("id"):
+                    # We have an id but could not fetch it. That is a lookup
+                    # failure, NOT a missing webhook.
+                    unresolvable = True
+                else:
+                    # No id to resolve at all. Nothing to conclude either way.
+                    unresolvable = True
             except Exception as e:
                 enrich_note = f"enrichment unavailable: {type(e).__name__}"
+                unresolvable = True
 
         ex = explain(ev, severity=severity_for(et),
                      verified=verified.get(f"{et}|{eid}", False)).as_dict()
         ex["received_at"] = f.stat().st_mtime
         ex["paypal_record"] = summarise_record(record)
         ex["enrich_note"] = enrich_note
+        # Absence of an event is not evidence of a withheld cause, and a failed
+        # lookup is not evidence of a missing event. Say only what is true.
+        ex["awaiting_webhook"] = bool(awaiting_webhook)
+        ex["unresolvable"] = bool(unresolvable)
 
         # Known type -> tailor it. Unknown type -> ask the model to explain it,
         # since the rules engine has nothing for it.
@@ -280,6 +303,7 @@ HTML = """<!doctype html>
   .badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;
          font-weight:600;text-transform:uppercase;letter-spacing:.05em}
   .b-unknown{background:rgba(255,162,58,.15);color:var(--high)}
+  .b-awaiting{background:rgba(79,124,255,.15);color:#8fb0ff}
   .b-confirmed{background:rgba(61,220,151,.15);color:var(--ok)}
   .b-verified{background:rgba(61,220,151,.15);color:var(--ok)}
   .b-ai{background:rgba(79,124,255,.18);color:#8fb0ff}
@@ -325,10 +349,27 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 function card(e,answers){
   const f=e.facts||{};
   const facts=Object.entries(f).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('');
-  const cause=e.cause
+  // Cause state, and it must distinguish TWO different things.
+  //
+  //   cause unknown      -> PayPal SENT an event, and the payload has no reason.
+  //                         That is a real disclosure gap.
+  //   awaiting webhook   -> we hold a PayPal record (from the API or the user)
+  //                         but no event has arrived for it. Absence of an
+  //                         event is NOT evidence that a cause is undisclosed.
+  //
+  // A comment challenged exactly this, and they were right: the old copy said
+  // "PayPal does not disclose the reason" for a dashboard where a completed
+  // capture (6YH19408NM0071141, USD 4,200.00) produced no webhook at all and
+  // rendered as silence. Conflating "they told us nothing" with "we heard
+  // nothing" is the exact error this product exists to avoid.
+  const cause = e.cause
     ? `<div class="cause"><span class="badge b-confirmed">confirmed</span> ${esc(e.cause)}</div>`
-    : `<div class="cause"><span class="badge b-unknown">cause unknown</span>
-       PayPal does not disclose the reason in this event. We will not invent one.</div>`;
+    : (e.awaiting_webhook
+        ? `<div class="cause"><span class="badge b-awaiting">awaiting webhook</span>
+             PayPal holds this state, but no event has arrived for it yet.
+             Absence of an event is not evidence that a cause was withheld.</div>`
+        : `<div class="cause"><span class="badge b-unknown">cause unknown</span>
+             PayPal sent this event without a reason. We will not invent one.</div>`);
   // AI layer: shown when present, silently omitted when there is no key / rate
   // limit / guardrail discard. The card is complete without it.
   // Key includes the event type, matching the server: PayPal's simulate-event
