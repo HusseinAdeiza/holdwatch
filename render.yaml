@@ -3,14 +3,20 @@ services:
   # (PayPal posts to it) and the dashboard (a judge reads it). Render runs one
   # service per process type, so the receiver is its own web service.
   #
-  # Free tier note: Render's free instances sleep after 15 minutes of
-  # inactivity and have an ephemeral filesystem. That is acceptable for the
-  # dashboard (it re-reads events from the repo's fixtures on boot) but means the
-  # public URL can be briefly cold. A paid instance avoids that.
+  # PLAN NOTES (2026-10-03):
+  #  - dashboard: Starter ($7/mo). Upgraded from free so judges never hit a
+  #    cold start — the free tier sleeps after 15 min idle and Render's
+  #    documented worst-case wake is ~50s. Funded by hackathon credit.
+  #  - receiver: deliberately left on free. PayPal retries delivery 25 times
+  #    over 3 days, so a sleeping receiver delays an event but never loses one.
+  #    Saves $7/mo for no practical cost.
+  #
+  # These plans are declared here so a Blueprint sync cannot silently revert a
+  # manual upgrade back to free.
   - type: web
     name: holdwatch-dashboard
     runtime: python
-    plan: free
+    plan: starter
     buildCommand: pip install -r requirements.txt || true
     startCommand: python3 app.py
     healthCheckPath: /api/health
@@ -39,5 +45,8 @@ services:
         sync: false
       - key: PAYPAL_CLIENT_SECRET
         sync: false
+      # Without this the receiver cannot verify a signature and now FAILS CLOSED
+      # with 503 rather than accepting unverifiable events. Set it or the service
+      # will correctly refuse all traffic.
       - key: PAYPAL_WEBHOOK_ID
         sync: false
