@@ -350,14 +350,22 @@ def answer(question: str, explanation, event_id: str) -> dict:
 
 
 def answer_with_deadline(question: str, explanation: dict, event_id: str,
-                         timeout: float = 8.0) -> dict:
+                         timeout: float = 20.0) -> dict:
     """
     Follow-up answer with a hard time cap.
 
-    Measured 2026-10-02: an uncached follow-up took 15.6 seconds because the key
-    was rate-limited and the call fell through the whole model chain. A demo
-    that sits on "asking…" for 16 seconds reads as broken, so we bound the wait
-    and fall back to the deterministic actions we already have.
+    Measured 2026-10-03: the 8s cap was set from an uncached call that took
+    15.6s because the key was rate-limited and fell through the whole model
+    chain. But a NORMAL uncached call is ~3s for the model alone, and the
+    follow-up prompt is larger, so the true uncached latency lands around 8-12s.
+    With an 8s deadline the live deployed endpoint answered
+    "model did not respond within 8s" on a healthy system — the timeout was
+    rejecting work that would have succeeded.
+
+    20s gives an uncached call room while still bounding a stuck one. Cached
+    answers return in well under a second and never reach this path. The UI
+    already shows a deterministic fallback rather than a spinner, so the longer
+    ceiling costs nothing when the model is unavailable.
     """
     box: dict = {}
 

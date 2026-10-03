@@ -489,13 +489,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "missing ?q="})
             for e in load_events(with_ai=False):
                 if e.get("event_id") == eid or e.get("event_type") == eid:
-                    # Measured 2026-10-02: an uncached follow-up took 15.6s —
-                    # the key was rate-limited so the call fell through the whole
-                    # model chain. The UI shows "asking…" that whole time, which
-                    # reads as broken in a demo. Cap it and answer with what we
-                    # already know rather than hanging.
+                    # Measured: an uncached follow-up legitimately takes 8-12s
+                    # (model ~3s plus a larger prompt). The earlier 8s deadline
+                    # rejected work that would have succeeded — the live
+                    # endpoint answered "did not respond within 8s" on a
+                    # healthy system. Cached answers never reach this path.
                     res = ai.answer_with_deadline(question, e, e.get("event_id") or eid,
-                                                  timeout=8.0)
+                                                  timeout=20.0)
                     return self._send(200, json.dumps(res, indent=2))
             # The UI sends "TYPE|ID" (see card() key) — match either part.
             if "|" in eid:

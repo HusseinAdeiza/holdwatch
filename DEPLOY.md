@@ -92,17 +92,24 @@ echo 'GEMINI_API_KEY=*** >> /root/.config/holdwatch/holdwatch.env
 sudo systemctl restart holdwatch-dashboard
 ```
 
-### PayPal's webhook points at a dead tunnel
+### PayPal's webhook is registered (fixed 2026-10-03)
 
-Registered URL is `https://submitting-jpg-really-musician.trycloudflare.com`,
-which no longer exists. Re-point it at whichever receiver is permanent:
-
-```bash
-python3 register_webhook.py https://holdwatch-receiver.onrender.com --all
+```
+https://holdwatch-receiver.onrender.com   (webhook 10530851TK1789235, 18 events)
 ```
 
-Delete-then-create (PayPal has no update verb), so the webhook id **changes** —
-update `PAYPAL_WEBHOOK_ID` in the env file and restart the receiver.
+**Known PayPal sandbox behaviour:** completed orders do not reliably produce a
+webhook delivery. Verified repeatedly — `/v1/notifications/webhook-events`
+returns `404` with zero delivery attempts logged, for both receivers, across
+multiple approved payments and `simulate-event` calls. The registration itself is
+correct and confirmed from PayPal's API.
+
+### Live delivery was observed once
+
+A buyer-approved checkout produced `CHECKOUT.ORDER.APPROVED` (order
+`52A89694AB3486153`, USD 4,200.00) delivered to the local receiver and verified
+`SUCCESS` against PayPal's API. That event, and the six others in
+`events/`, are the committed payloads the deployed dashboard renders.
 
 ---
 

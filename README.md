@@ -317,12 +317,27 @@ A local checksum was implemented first and discarded — it failed against genui
 events, and being symmetric it would have permitted forgery from one observed
 valid triple.
 
-**Verification fails closed.** With no `webhook_id` configured the receiver
-returns `503` and stores nothing, rather than accepting an event it cannot
-authenticate. This was a real bug: the receiver originally skipped verification
-when `webhook_id` was absent, and a deployed instance accepted a forged payload.
-Both paths are now tested — `503` with no id, `400` on a forged signature, and
-zero events stored in both cases.
+**Verification fails closed.** An event is recorded **only** when PayPal has
+confirmed that exact signature. Anything else is rejected with `400` and stored
+nothing — including the case where no `webhook_id` is configured, where the
+response carries `"detail": "receiver has no webhook_id configured"`.
+
+This took three attempts and the reasoning is worth recording, because getting it
+wrong was invisible:
+
+1. Verification was originally **skipped** when no `webhook_id` existed, so a
+   deployed instance accepted a forged payload — confirmed live, `{"received": true}`.
+2. The fix returned `503` instead — but the deployed service kept accepting,
+   because it was running an older commit and I had mistaken an observed `400` for
+   the new code. The tell was stored events with `verified=None`: verification had
+   never run there at all.
+3. Now the gate does not depend on configuration. `verified` starts `False` and is
+   only ever set `True` by PayPal returning `SUCCESS`. A stale or misconfigured
+   deploy refuses traffic rather than rendering an attacker's forged *"your payout
+   was held"* as fact.
+
+Tested on both receivers: bare `POST` → `400`, forged signature → `400`, VPS
+receiver with a real `webhook_id` → `400`, and zero events stored on every path.
 
 **Forgeries are rejected at intake, not displayed.** Verified by negative control.
 
