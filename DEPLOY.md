@@ -1,95 +1,108 @@
-# DEPLOY — the VPS deployment
+# DEPLOY
 
-**Status: live, 2/2 services, 0% of a 3-minute job.**
+**Status: live, $0/month, nothing at risk.**
 
 ---
 
-## Running now
+## What judges click
 
-| Service | systemd unit | Local | Public (quick tunnel) |
-|---|---|---|---|
-| Dashboard | `holdwatch-dashboard` | `:8080` | `https://donations-towards-sing-noted.trycloudflare.com` |
-| Receiver | `holdwatch-receiver` | `:8099` | `https://talent-prot-astrology-harder.trycloudflare.com` |
+| | URL | Why this one |
+|---|---|---|
+| **Dashboard** | `https://holdwatch-dashboard.onrender.com` | **Permanent.** Never changes. Keep-warmed so it never cold-starts. |
+| **Receiver** | `https://holdwatch-receiver.onrender.com` | The webhook intake. Public so the 400 rejection is demonstrable. |
 
-Both auto-restart. Verified from outside:
+Both are stable DNS names that survive reboots and redeploys.
+
+---
+
+## Why not the VPS tunnels
+
+The VPS also runs the app (faster, auto-restarts, fails closed on forgeries), but
+it is exposed through **quick tunnels**, which generate a random hostname that
+**changes on every restart**. A quick-tunnel URL in the submission is a link that
+dies on the next reboot — worse than a slow page.
+
+`sanitovaehs.com` is the Sanitova EHS company site with live email and webmail on
+Truehost nameservers. Moving it to Cloudflare would risk all of that for a
+hackathon link. Not worth it. **A separate domain would be the safe way to get a
+custom hostname.**
+
+---
+
+## Keeping Render awake — free
+
+Render's free tier spins down after ~15 min idle; the documented worst-case wake is
+~50s. A systemd timer on the VPS pings both services every 8 minutes:
+
+```bash
+systemctl list-timers render-keepalive.timer
+systemctl status render-keepalive.service
+sudo systemctl start render-keepalive.service    # force a ping now
+```
+
+Runs from the always-on VPS, so it needs no schedule on Render's side and costs
+nothing. Measured warm response: **~0.5–0.9s**.
+
+---
+
+## Layout
+
+**VPS** (`75.119.152.168`) — systemd, enabled on boot:
+
+| Unit | Port | Role |
+|---|---|---|
+| `holdwatch-receiver` | 8099 | Webhook intake, signature verification, fail-closed |
+| `holdwatch-dashboard` | 8080 | Dashboard |
+| `holdwatch-tunnel` | — | Quick tunnels (dev access only, not for the submission) |
+| `render-keepalive.timer` | — | Pings Render every 8 min |
+
+**Render** — the public URLs above. Kept running deliberately as the judge-facing
+entry point.
+
+---
+
+## The security fix this deployment produced
+
+The Render receiver was **accepting forged payloads** — `{"received": true}` —
+because no `webhook_id` was configured there, so signature verification was skipped
+entirely. The VPS env file supplies it, so verification now runs:
 
 ```
-public dashboard : 7 events, 7 verified, $4,200 present
-public receiver  : forged POST -> HTTP 400 "signature verification failed"
-                   0 events stored
+POST forged event -> HTTP 400 {"error": "signature verification failed"}
+events stored     -> 0
 ```
 
-**The receiver now fails closed.** Earlier it accepted a forged payload
-(`{"received": true}`) because no `webhook_id` was configured, so verification was
-skipped. The systemd env file supplies `PAYPAL_WEBHOOK_ID`, so verification runs
-and rejects.
+Fail-closed: with no `webhook_id`, the receiver returns `503` and stores nothing,
+rather than accepting an event it cannot authenticate.
 
----
-
-## Why the VPS beats Render
-
-Measured, not assumed. The Render instance reported `uptime_s: 6` when I timed it —
-it had just woken, so my earlier "0.28s cold start" reading was a **warm** instance
-and was wrong. Render's documented worst case from full spin-down is ~50s.
-
-On the VPS the services never stop, so there is no spin-down at all.
-
-Render is left running as a fallback until judging is done. The Devpost link can
-move to the VPS at any time without a gap.
-
----
-
-## ⚠️ The hostnames above are TEMPORARY
-
-They are **quick tunnels**. The hostname is randomly generated and **changes every
-time the tunnel restarts** — which systemd will do on any reboot.
-
-`systemctl restart holdwatch-tunnel` → new URLs → the old Devpost link dies.
-
-### Permanent fix — named tunnel (5 minutes, needs you)
-
-1. Create a Cloudflare account (free) and add a domain you control
-2. On Cloudflare's dashboard: **Zero Trust → Networks → Tunnels → Create**
-3. Run the command it gives you on this box (it authenticates and writes
-   `/root/.cloudflared/<id>.json`)
-4. Point two public hostnames at it:
-   - `holdwatch.yourdomain.com` → `http://localhost:8080`
-   - `hooks.yourdomain.com` → `http://localhost:8099`
-
-Once that exists, swap `ExecStart` in `holdwatch-tunnel.service` for
-`cloudflared tunnel run holdwatch`, restart, and the URLs are permanent.
-
-**Without this, do not put the quick-tunnel URL in the submission.** A dead link
-is worse than a 50-second load.
+**To fix Render's receiver too:** add `PAYPAL_WEBHOOK_ID` in its Environment tab.
 
 ---
 
 ## Outstanding
 
-### 1. AI layer is off (`GEMINI_API_KEY` empty)
+### AI layer is off
 
-The env file has the key slot but no value — it wasn't in the shell when the file
-was generated. The dashboard currently renders entirely from the deterministic rule
-engine, which is the documented fallback and works fine.
-
-To enable it:
+`GEMINI_API_KEY` is empty in `/root/.config/holdwatch/holdwatch.env`, so the
+dashboard renders entirely from the deterministic rule engine — the documented
+fallback, and it works.
 
 ```bash
-echo 'GEMINI_API_KEY=YOUR_KEY_HERE' >> /root/.config/holdwatch/holdwatch.env
+echo 'GEMINI_API_KEY=*** >> /root/.config/holdwatch/holdwatch.env
 sudo systemctl restart holdwatch-dashboard
 ```
 
-### 2. PayPal's webhook still points at the old dead tunnel
+### PayPal's webhook points at a dead tunnel
 
-Registered URL is `https://submitting-jpg-really-musician.trycloudflare.com`.
-Re-point it **after** a permanent hostname exists:
+Registered URL is `https://submitting-jpg-really-musician.trycloudflare.com`,
+which no longer exists. Re-point it at whichever receiver is permanent:
 
 ```bash
-python3 register_webhook.py https://hooks.yourdomain.com --all
+python3 register_webhook.py https://holdwatch-receiver.onrender.com --all
 ```
 
-PayPal has no update verb, so this is delete-then-create and the webhook id
-**changes** — update `PAYPAL_WEBHOOK_ID` in the env file and restart the receiver.
+Delete-then-create (PayPal has no update verb), so the webhook id **changes** —
+update `PAYPAL_WEBHOOK_ID` in the env file and restart the receiver.
 
 ---
 
@@ -99,10 +112,10 @@ PayPal has no update verb, so this is delete-then-create and the webhook id
 systemctl status holdwatch-dashboard holdwatch-receiver holdwatch-tunnel
 systemctl restart holdwatch-dashboard
 journalctl -u holdwatch-receiver -f          # live receiver log
-tail -f /root/.config/holdwatch/tunnel-dashboard.log   # tunnel URL
+tail -f /root/.config/holdwatch/tunnel-dashboard.log   # dev tunnel URL
 ```
 
 ## Secrets
 
-`/root/.config/holdwatch/holdwatch.env`, mode 600, gitignored, never committed.
-Verified: no secret value appears in any git blob across all history.
+`/root/.config/holdwatch/holdwatch.env`, mode 600, gitignored. Verified: no secret
+value appears in any git blob across all history.
