@@ -161,8 +161,7 @@ def draw_face(bleed=0):
     d.text((x, y0 + 78), EXPLAINERS["PAYMENT.PAYOUTS-ITEM.HELD"]["headline"],
            font=font(34, True), fill=INK)
 
-    d.text((x, y0 + 146), "USD", font=font(26, True), fill=MUTED)
-    d.text((x + 74, y0 + 122), "1.00", font=font(104, True), fill=CRIT)
+    d.text((x + 74, y0 + 122), "$1.00", font=font(104, True), fill=CRIT)
     d.text((x + 84, y0 + 244), "frozen  ·  not lost", font=font(20), fill=MUTED)
 
     by, bh2 = y0 + 296, 86

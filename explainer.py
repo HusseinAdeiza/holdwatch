@@ -68,7 +68,10 @@ A_DOCS = "Have delivery/proof-of-delivery documentation ready — it is what res
 # underlying reason through this payload. We say so rather than guessing.
 EXPLAINERS: dict[str, dict] = {
     "PAYMENT.PAYOUTS-ITEM.HELD": {
-        "headline": "PayPal held a payout you were sending",
+        # "a payout you were sending" was flagged as semantically confusing:
+        # "payout" usually reads as money coming IN, so pairing it with "you were
+        # sending" muddles the direction. "outbound payout" is unambiguous.
+        "headline": "PayPal held money you were sending out",
         "impact": "The money has left neither your balance nor the recipient. "
                   "It is frozen pending review.",
         "cause": None,

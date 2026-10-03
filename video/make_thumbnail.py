@@ -73,7 +73,7 @@ def main() -> None:
            font=font(26), fill=(168, 174, 186))
 
     # ── the card: a real event, cropped tight ──────────────────────────────
-    cx0, cy0, cx1, cy1 = 64, 160, W - 64, 780
+    cx0, cy0, cx1, cy1 = 20, 128, W - 20, 690
     d.rounded_rectangle([cx0, cy0, cx1, cy1], radius=18, fill=RAISED,
                         outline=LINE, width=2)
     d.rectangle([cx0, cy0, cx0 + 8, cy1], fill=CRIT)   # severity edge
@@ -103,8 +103,7 @@ def main() -> None:
             "receiver": "beamdaddy@paypal.com",
         }
     })
-    d.text((x, cy0 + 196), "USD", font=font(34, True), fill=MUTED)
-    d.text((x + 96, cy0 + 168), "1.00", font=font(132, True), fill=CRIT)
+    d.text((x + 96, cy0 + 168), "$1.00", font=font(132, True), fill=CRIT)
     d.text((x + 108, cy0 + 316), "frozen  ·  not lost",
            font=font(26), fill=MUTED)
 
