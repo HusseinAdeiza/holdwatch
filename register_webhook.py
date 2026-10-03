@@ -105,6 +105,8 @@ def main() -> int:
     ap.add_argument("--list", action="store_true", help="show current webhooks")
     ap.add_argument("--all", action="store_true", help="subscribe all 18 events")
     ap.add_argument("--delete", action="store_true", help="remove the stored webhook")
+    ap.add_argument("--keep-others", action="store_true",
+                    help="do not remove webhook subscriptions registered on other URLs")
     a = ap.parse_args()
 
     if not (CFG / "client_id").exists() or not (CFG / "sandbox_secret").exists():
@@ -149,6 +151,22 @@ def main() -> int:
     code, hooks = list_webhooks(token)
     existing = next((w for w in hooks if w.get("url") == a.url), None)
     old_id = existing["id"] if existing else None
+
+    # PayPal allows multiple webhook subscriptions, so creating one for a NEW url
+    # does NOT displace an old one. Matching only on the target url therefore
+    # left the previous (now dead) tunnel subscribed when re-pointing, which is
+    # how a stale subscription silently survives a migration.
+    #
+    # Purge any subscription whose host differs from the one we're registering,
+    # unless --keep-others is passed. PayPal delivers each event to EVERY
+    # matching subscription, so a second live one would double-count events.
+    if not a.keep_others:
+        for w in hooks:
+            wid, wurl = w.get("id"), w.get("url", "")
+            if not wid or wurl == a.url:
+                continue
+            dcode, dout = call(token, "DELETE", f"/v1/notifications/webhooks/{wid}")
+            print(f"  removed stale subscription {wid} -> {wurl} (HTTP {dcode})")
 
     if old_id:
         dcode, dout = call(token, "DELETE", f"/v1/notifications/webhooks/{old_id}")
