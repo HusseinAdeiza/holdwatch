@@ -4,16 +4,28 @@ Three things on the submission are now out of date. Everything else is correct.
 
 ---
 
-## 1. "Try it out" links — the first one is a dead tunnel
+## 1. "Try it out" links — replace the tunnel with the permanent URL
 
 **Currently on the page:** `ethics-theater-duty-jackie.trycloudflare.com`
 
-That was a quick tunnel. It is gone — and quick-tunnel hostnames die on every
-restart anyway, so it would rot repeatedly.
+I initially wrote that this link was dead. **That was wrong — I checked instead of
+assuming and it returns 200.** It is still serving, because the cloudflared process
+for it is still running on the VPS.
+
+But it is still the wrong link to publish, for two reasons:
+
+1. **It is a quick tunnel.** The hostname is bound to a running process and changes
+   on every restart, so the link silently rots. Judges who bookmark it, or who
+   click after a reboot, get nothing.
+2. **It serves a stale instance.** That endpoint returns `ai_enabled: false` — the
+   old manually-started process, not the systemd one. A judge clicking it today
+   would see the AI layer missing, which undercuts the "meaningful AI" requirement.
+
+The Render URL is permanent and current.
 
 Go to **Edit hackathon submission → Additional info → Try it out links.**
 
-Replace the dead link with these four, in this order:
+Replace the first link with these four, in this order:
 
 ```
 https://holdwatch-dashboard.onrender.com
@@ -28,7 +40,7 @@ Label them: *Live dashboard* · *Webhook receiver* · *GitHub Repo* · *youtu.be
 
 ## 2. "Working demo URL" field
 
-**Currently:** the same dead tunnel.
+**Currently:** the same tunnel URL.
 
 ```
 https://holdwatch-dashboard.onrender.com
@@ -38,7 +50,7 @@ https://holdwatch-dashboard.onrender.com
 
 ## 3. "Testing instructions or credentials" field
 
-The current text describes the dead tunnel and says the repository is the durable
+The current text describes the tunnel and says the repository is the durable
 artefact. Replace the body with:
 
 ```
