@@ -1,10 +1,11 @@
 # Devpost update — what to change, exactly
 
-Three things on the submission are now out of date. Everything else is correct.
+Three things on the submission are out of date, now that the site is live at
+https://holdwatch-site.onrender.com. Everything else is correct.
 
 ---
 
-## 1. "Try it out" links — replace the tunnel with the permanent URL
+## 1. "Try it out" links — add the site first
 
 **Currently on the page:** `ethics-theater-duty-jackie.trycloudflare.com`
 
@@ -19,22 +20,19 @@ But it is still the wrong link to publish, for two reasons:
    click after a reboot, get nothing.
 2. **It serves a stale instance.** That endpoint returns `ai_enabled: false` — the
    old manually-started process, not the systemd one. A judge clicking it today
-   would see the AI layer missing, which undercuts the "meaningful AI" requirement.
+   would see the AI layer missing.
 
-The Render URL is permanent and current.
-
-Go to **Edit hackathon submission → Additional info → Try it out links.**
-
-Replace the first link with these four, in this order:
+Use these four, in this order:
 
 ```
+https://holdwatch-site.onrender.com
 https://holdwatch-dashboard.onrender.com
 https://holdwatch-receiver.onrender.com
 https://github.com/HusseinAdeiza/holdwatch
 https://youtu.be/bFOglGDKJpM
 ```
 
-Label them: *Live dashboard* · *Webhook receiver* · *GitHub Repo* · *youtu.be*
+Labels: *Product site* · *Live dashboard* · *Webhook receiver* · *GitHub Repo* · *youtu.be*
 
 ---
 

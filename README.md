@@ -249,7 +249,16 @@ they create real PayPal transactions and export the site's data respectively.
 
 ## Live deployment
 
-Both services run publicly. No setup needed to judge the project.
+| | |
+|---|---|
+| **Site** | https://holdwatch-site.onrender.com |
+| **Dashboard** | https://holdwatch-dashboard.onrender.com |
+| **Webhook receiver** | https://holdwatch-receiver.onrender.com |
+
+The site is generated from the dashboard at build time: every figure on it is
+read from the deployment below, and the build fails rather than publish an
+unverified number. Both product services run publicly. No setup needed to judge
+the project.
 
 | | |
 |---|---|

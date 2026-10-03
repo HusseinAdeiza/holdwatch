@@ -4,6 +4,7 @@ Paste-ready. Every claim below is something we ran and verified.
 
 - **Live demo:** https://holdwatch-dashboard.onrender.com
 - **Webhook receiver:** https://holdwatch-receiver.onrender.com
+- **Site:** https://holdwatch-site.onrender.com
 - **Video:** https://youtu.be/bFOglGDKJpM
 - **Repo:** https://github.com/HusseinAdeiza/holdwatch
 - **Deadline:** Nov 12, 2026, 2:00 PM PT
