@@ -53,15 +53,31 @@ chk "AI errors (cache now persists)" "$AIERR" "0"
 
 echo
 echo "── 4. security: forgeries rejected ────────────────────"
+# Two paths: a bare POST (no signature headers at all) and one that presents
+# forged signature headers. Both must be rejected, and neither may be stored.
 code=$(curl -s -o /tmp/v1 -w '%{http_code}' --max-time 90 -X POST $RECV/ \
+  -H "Content-Type: application/json" \
+  -d '{"id":"VERIFY-BARE","event_type":"PAYMENT.PAYOUTS-ITEM.HELD"}')
+chk "bare POST rejected" "$code" "400"
+code=$(curl -s -o /tmp/v2 -w '%{http_code}' --max-time 90 -X POST $RECV/ \
   -H "Content-Type: application/json" \
   -H "PAYPAL-TRANSMISSION-ID: v1" -H "PAYPAL-TRANSMISSION-TIME: 2026-01-01T00:00:00Z" \
   -H "PAYPAL-TRANSMISSION-SIG: 111" -H "PAYPAL-AUTH-ALGO: SHA256withRSA" \
   -H "PAYPAL-CERT-URL: https://api.paypal.com/f.pem" \
-  -d '{"id":"VERIFY-1","event_type":"PAYMENT.PAYOUTS-ITEM.HELD"}')
+  -d '{"id":"VERIFY-SIG","event_type":"PAYMENT.PAYOUTS-ITEM.HELD"}')
 chk "forged w/ sig headers" "$code" "400"
 ST=$(curl -s --max-time 60 $RECV/events | python3 -c "import sys,json;print(json.load(sys.stdin)['unique'])")
 chk "events stored (must be 0)" "$ST" "0"
+
+# The VPS receiver is the one with a webhook_id configured, so it verifies for
+# real and rejects on PayPal's answer rather than on missing config.
+vcode=$(curl -s -o /tmp/v3 -w '%{http_code}' --max-time 90 -X POST http://127.0.0.1:8099/ \
+  -H "Content-Type: application/json" \
+  -H "PAYPAL-TRANSMISSION-ID: v1" -H "PAYPAL-TRANSMISSION-TIME: 2026-01-01T00:00:00Z" \
+  -H "PAYPAL-TRANSMISSION-SIG: 111" -H "PAYPAL-AUTH-ALGO: SHA256withRSA" \
+  -H "PAYPAL-CERT-URL: https://api.paypal.com/f.pem" \
+  -d '{"id":"VERIFY-VPS","event_type":"PAYMENT.PAYOUTS-ITEM.HELD"}')
+chk "VPS receiver (verified path)" "$vcode" "400"
 
 echo
 echo "── 5. PayPal registration ─────────────────────────────"
