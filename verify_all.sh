@@ -80,6 +80,39 @@ vcode=$(curl -s -o /tmp/v3 -w '%{http_code}' --max-time 90 -X POST http://127.0.
 chk "VPS receiver (verified path)" "$vcode" "400"
 
 echo
+echo "── 4b. PRODUCTION ROUTES (how a browser actually loads it) ──"
+# Added 2026-10-03 after /api/events returned 502 on Render while /api/health and
+# / returned 200: the page loaded and then fetched nothing, so a judge saw an
+# empty dashboard. This check calls the route the DASHBOARD ITSELF calls — the
+# bare /api/events, no query flags — and asserts the body is JSON, not an error
+# page. /api/health passing proves nothing about this route.
+proot=$(curl -s -o /tmp/proot.json -w '%{http_code}' --max-time 90 "$DASH/")
+chk "dashboard root"      "$proot" "200"
+pev=$(curl -s -o /tmp/pev.json -w '%{http_code}' --max-time 90 "$DASH/api/events")
+chk "dashboard /api/events (browser path)" "$pev" "200"
+pai=$(curl -s -o /tmp/pai.json -w '%{http_code}' --max-time 90 "$DASH/api/events?ai=0")
+chk "dashboard /api/events?ai=0"          "$pai" "200"
+# Content assertion: a 200 can still be an HTML error page from the proxy.
+pjson=$(python3 -c "
+import json
+try:
+    d=json.load(open('/tmp/pev.json'))
+    print('json-ok' if d.get('total',0)>0 else 'json-empty')
+except Exception:
+    print('not-json')
+")
+chk "/api/events returns JSON with events"  "$pjson" "json-ok"
+# The AI path is what the page uses by default; it must work too, or cards lose
+# their explanation.
+pai2=$(curl -s -o /tmp/pai2.json -w '%{http_code}' --max-time 120 "$DASH/api/events?ai=1")
+chk "dashboard /api/events?ai=1"          "$pai2" "200"
+# Enrichment is opt-in because it calls PayPal; if it stalls it must not take
+# the page with it. Bounded time proves the page is independent of it.
+ptime=$(curl -s -o /dev/null -w '%{time_total}' --max-time 30 "$DASH/api/events?ai=0")
+slow=$(python3 -c "print('slow' if $ptime>5 else 'fast')")
+chk "default path has no upstream stall"   "$slow" "fast"
+
+echo
 echo "── 5. PayPal registration ─────────────────────────────"
 cd /root/web3alphatester/paypal
 REG=$(python3 register_webhook.py --list 2>/dev/null | grep -c "^  [0-9A-Z]*  ->")
