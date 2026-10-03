@@ -66,6 +66,13 @@ def _resolve_events_dir() -> Path:
 
 
 EVENT_DIR = _resolve_events_dir()
+
+# Deadline for a follow-up answer, used by BOTH /api/ask branches.
+# Measured 2026-10-03: an uncached call legitimately takes 8-12s (model ~3s
+# plus a larger prompt). The original 8s rejected work that would have
+# succeeded. Defined once because the two branches had drifted apart — one was
+# raised to 20 and the other, the one the UI actually hits, was left at 8.
+ANSWER_TIMEOUT = 20.0
 def verified_path():
     """Local state, not a secret — resolved via config for hosted deploys."""
     import config
@@ -495,15 +502,21 @@ class Handler(BaseHTTPRequestHandler):
                     # endpoint answered "did not respond within 8s" on a
                     # healthy system. Cached answers never reach this path.
                     res = ai.answer_with_deadline(question, e, e.get("event_id") or eid,
-                                                  timeout=20.0)
+                                                  timeout=ANSWER_TIMEOUT)
                     return self._send(200, json.dumps(res, indent=2))
             # The UI sends "TYPE|ID" (see card() key) — match either part.
+            #
+            # BUG FOUND 2026-10-03: this branch still had timeout=8.0 after the
+            # other branch was raised to 20. The UI always sends the composite
+            # key, so this is the ONLY branch a real user hits — meaning the
+            # deploy "fix" changed a path nobody exercises. Found by grepping
+            # for the literal after the live endpoint kept timing out.
             if "|" in eid:
                 etype, _, epart = eid.partition("|")
                 for e in load_events(with_ai=False):
                     if e.get("event_type") == etype and e.get("event_id") == epart:
                         res = ai.answer_with_deadline(question, e, e.get("event_id") or epart,
-                                                      timeout=8.0)
+                                                      timeout=ANSWER_TIMEOUT)
                         return self._send(200, json.dumps(res, indent=2))
             return self._send(404, {"error": "unknown event_id"})
 
