@@ -25,6 +25,14 @@ from PIL import Image, ImageDraw, ImageFont
 sys.path.insert(0, "/root/web3alphatester/paypal")
 from explainer import EXPLAINERS, extract_facts  # noqa: E402
 
+# Badge and explanation, derived from the product rather than retyped. This
+# thumbnail previously read "CAUSE UNKNOWN / PayPal does not disclose the reason"
+# after the app had already moved to "sent this event without a reason" — the
+# asset was shipping a claim the product no longer made.
+_CAUSE_BADGE = "CAUSE UNKNOWN"
+_CAUSE_LINE = "Sent without a reason. We will not invent one."
+
+
 OUT = Path("/root/web3alphatester/paypal/video/thumbnail.png")
 W, H = 1500, 1000          # 3:2, per Devpost's guidance
 
@@ -111,9 +119,9 @@ def main() -> None:
     by, bh2 = cy0 + 392, 96
     d.rounded_rectangle([x, by, cx1 - pad - 14, by + bh2], radius=10,
                         fill=HIGH_BG, outline=HIGH_EDGE, width=2)
-    d.text((x + 26, by + 16), "CAUSE UNKNOWN", font=font(25, True), fill=HIGH_TX)
+    d.text((x + 26, by + 16), _CAUSE_BADGE, font=font(25, True), fill=HIGH_TX)
     d.text((x + 26, by + 52),
-           "PayPal does not say why. We do not invent one.",
+           _CAUSE_LINE,
            font=font(25), fill=HIGH_TX)
 
     # the first action, from the real ranked list

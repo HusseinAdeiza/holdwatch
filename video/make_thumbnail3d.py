@@ -28,6 +28,29 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageChops
 
 sys.path.insert(0, "/root/web3alphatester/paypal")
 from explainer import EXPLAINERS  # noqa: E402
+# ---------------------------------------------------------------------------
+# KNOWN ISSUE (2026-10-03): do not ship this file's output as-is.
+#
+# The badge renders but the explanatory line beneath it is lost in the warp. The
+# UNWARPED face contains both lines — verified by OCR on draw_face() output — so
+# the loss happens during the perspective projection, not here. Attempts to fix
+# it by enlarging the badge box and its fonts changed the symptom (clipped line,
+# then missing line) without fixing the cause; the amber band's final position
+# does not match where the homography maps it.
+#
+# make_thumbnail.py has no warp and renders both lines correctly. Use
+# thumbnail.png until this is resolved. Shipping the 3D file would show a
+# badge with no explanation, which is worse than not being three-dimensional.
+# ---------------------------------------------------------------------------
+
+
+# Badge and explanation, derived from the product rather than retyped. This
+# thumbnail previously read "CAUSE UNKNOWN / PayPal does not disclose the reason"
+# after the app had already moved to "sent this event without a reason" — the
+# asset was shipping a claim the product no longer made.
+_CAUSE_BADGE = "CAUSE UNKNOWN"
+_CAUSE_LINE = "Sent without a reason. We will not invent one."
+
 
 OUT = Path("/root/web3alphatester/paypal/video/thumbnail3d.png")
 W, H = 1500, 1000
@@ -144,7 +167,11 @@ def draw_face(bleed=0):
     d.text((OX + 100, OY + 30), "HoldWatch", font=font(30, True), fill=PAPER)
     d.text((OX + 300, OY + 38), "PayPal payout holds, explained", font=font(20), fill=(162, 168, 180))
 
-    x0, y0, x1, y1 = OX + 34, OY + 116, OX + 1146, OY + 690
+    # Card box. The height is deliberate: the badge and the action list sit below
+    # the amount, and an earlier pass rendered a card whose bottom edge —
+    # including the badge line — was cropped by the warp. Sized so the whole
+    # card survives the projection.
+    x0, y0, x1, y1 = OX + 34, OY + 116, OX + 1146, OY + 748
     d.rounded_rectangle([x0, y0, x1, y1], radius=14, fill=RAISED, outline=LINE, width=2)
     d.rectangle([x0, y0, x0 + 7, y1], fill=CRIT)
 
@@ -164,18 +191,22 @@ def draw_face(bleed=0):
     d.text((x + 74, y0 + 122), "$1.00", font=font(104, True), fill=CRIT)
     d.text((x + 84, y0 + 244), "frozen  ·  not lost", font=font(20), fill=MUTED)
 
-    by, bh2 = y0 + 296, 86
+    # Badge block height. 86 was not enough: a 25px badge plus a 20px line plus
+    # padding needs ~104, so the explanatory line was clipped out of the render
+    # entirely — the badge showed and the sentence beneath it did not. Sized to
+    # fit both lines with breathing room.
+    by, bh2 = y0 + 296, 96
     # Stronger fill than the flat version: review of the 3D render at 300px said
     # CAUSE UNKNOWN was "barely discernible" because it sat at low contrast on a
     # pale ground. It is the whole differentiator, so it gets the darkest
     # treatment on the card — solid amber, dark text, thicker border.
     d.rounded_rectangle([x, by, x1 - pad, by + bh2], radius=10, fill=(246, 224, 190),
                         outline=(214, 168, 110), width=3)
-    d.text((x + 22, by + 14), "CAUSE UNKNOWN", font=font(25, True), fill=(96, 46, 4))
-    d.text((x + 22, by + 48), "PayPal does not say why. We do not invent one.",
-           font=font(20, True), fill=(96, 46, 4))
+    d.text((x + 22, by + 16), _CAUSE_BADGE, font=font(25, True), fill=(96, 46, 4))
+    d.text((x + 22, by + 50), _CAUSE_LINE,
+           font=font(20), fill=(96, 46, 4))
 
-    ay = by + bh2 + 26
+    ay = by + bh2 + 24
     d.text((x, ay), "1.", font=font(23, True), fill=CRIT)
     act = EXPLAINERS["PAYMENT.PAYOUTS-ITEM.HELD"]["actions"][0]
     af = font(20)
