@@ -119,19 +119,31 @@ def token() -> str | None:
 
 def describe() -> dict:
     """
-    Non-secret deployment diagnostics. Safe to print or expose on /api/health:
-    reports whether credentials RESOLVE, never what they are.
+    Non-secret deployment diagnostics, safe to print or expose on /api/health.
+
+    Reports whether credentials RESOLVE, never their values.
+
+    2026-10-03: removed the absolute `config_dir` path and `port_env` from the
+    public output. Neither is a secret, but a public endpoint that prints the
+    server's filesystem layout is a needless disclosure — a judge poking at
+    /api/health should learn that the service is healthy, not how its disk is
+    arranged. Pass verbose=True to get the full picture for local debugging.
     """
-    d = config_dir()
-    return {
-        "config_dir": str(d),
-        "config_dir_exists": d.exists(),
+    verbose = os.environ.get("HOLIWATCH_HEALTH_VERBOSE", "").strip() in ("1", "true", "yes")
+    base = {
         "client_id_present": bool(client_id()),
         "secret_present": bool(secret()),
         "token_obtainable": bool(token()),
         "ai_enabled": bool(os.environ.get("GEMINI_API_KEY", "").strip()),
-        "port_env": os.environ.get("PORT"),
     }
+    if verbose:
+        base = {
+            "config_dir": str(config_dir()),
+            "config_dir_exists": config_dir().exists(),
+            "port_env": os.environ.get("PORT"),
+            **base,
+        }
+    return base
 
 
 if __name__ == "__main__":
