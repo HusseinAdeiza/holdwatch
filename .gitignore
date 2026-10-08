@@ -36,3 +36,4 @@ video/shots/
 
 # Captured PayPal events ARE committed: the deployed dashboard renders them so a
 # judge sees real signed payloads. All addresses are sandbox (.example.com).
+video/node_modules/
